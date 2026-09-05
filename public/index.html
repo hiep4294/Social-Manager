@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Social Manager V1</title>
+  <style>
+    :root{font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;color:#17202a;background:#f4f6f8}
+    *{box-sizing:border-box} body{margin:0} button,input,textarea,select{font:inherit}
+    .hidden{display:none!important}.app{max-width:1280px;margin:auto;padding:20px}.top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:18px}.brandTitle{font-weight:800;font-size:22px}.muted{color:#667085;font-size:13px}.grid{display:grid;grid-template-columns:1.2fr .8fr;gap:18px}.card{background:white;border:1px solid #e4e7ec;border-radius:14px;padding:18px;box-shadow:0 2px 8px rgba(16,24,40,.04)}h2{font-size:18px;margin:0 0 14px}.row{display:flex;gap:10px;flex-wrap:wrap}.field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}.field label{font-size:13px;font-weight:700}.field input,.field textarea,.field select{border:1px solid #d0d5dd;border-radius:10px;padding:10px 12px;background:#fff}.field textarea{min-height:170px;resize:vertical}.btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}.primary{background:#101828;color:#fff}.secondary{background:#eef2f6;color:#101828}.danger{background:#fff0f0;color:#b42318}.platform{display:inline-flex;align-items:center;gap:6px;padding:9px 11px;border:1px solid #d0d5dd;border-radius:10px;background:white}.preview{border:1px solid #e4e7ec;border-radius:12px;padding:14px;background:#fafafa;white-space:pre-wrap;min-height:120px}.status{font-size:12px;font-weight:800;padding:5px 8px;border-radius:999px;display:inline-block}.PUBLISHED{background:#ecfdf3;color:#027a48}.FAILED{background:#fef3f2;color:#b42318}.PENDING,.PROCESSING{background:#fffaeb;color:#b54708}.post{border-top:1px solid #eaecf0;padding:14px 0}.post:first-child{border-top:0}.post-content{white-space:pre-wrap;font-size:14px}.thumb{width:100%;max-height:280px;object-fit:cover;border-radius:10px;border:1px solid #eaecf0}.login{min-height:100vh;display:grid;place-items:center;padding:20px}.login .card{width:min(420px,100%)}.notice{padding:10px 12px;border-radius:10px;background:#eef4ff;color:#3538cd;font-size:13px;margin-bottom:12px}.error{background:#fef3f2;color:#b42318}.tabs{display:flex;gap:8px;margin-bottom:15px;flex-wrap:wrap}.tab.active{background:#101828;color:white}.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}.kpi .card{padding:14px}.kpi strong{font-size:24px;display:block}.small{font-size:12px}.imgbox{font-size:13px;color:#475467}.split{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:850px){.grid,.split{grid-template-columns:1fr}.kpi{grid-template-columns:1fr}.app{padding:12px}}
+  </style>
+</head>
+<body>
+  <div id="loginView" class="login">
+    <div class="card">
+      <h2>Social Manager V1</h2>
+      <p class="muted">Quản lý nội dung cho quán ăn và cửa hàng.</p>
+      <div id="loginMsg"></div>
+      <form id="loginForm">
+        <div class="field"><label>Tài khoản</label><input id="loginUser" value="admin" autocomplete="username"></div>
+        <div class="field"><label>Mật khẩu</label><input id="loginPass" type="password" autocomplete="current-password"></div>
+        <button class="btn primary" style="width:100%">Đăng nhập</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="appView" class="app hidden">
+    <div class="top">
+      <div><div class="brandTitle">Social Manager</div><div class="muted" id="brandSubtitle">V1.0.0</div></div>
+      <div class="row"><button class="btn secondary" id="refreshBtn">Làm mới</button><button class="btn danger" id="logoutBtn">Đăng xuất</button></div>
+    </div>
+
+    <div class="tabs">
+      <button class="btn tab active" data-tab="compose">Soạn bài</button>
+      <button class="btn tab secondary" data-tab="history">Lịch sử</button>
+      <button class="btn tab secondary" data-tab="brand">Thương hiệu</button>
+    </div>
+
+    <section id="tab-compose">
+      <div class="grid">
+        <div class="card">
+          <h2>Tạo bài đăng</h2>
+          <div id="composeMsg"></div>
+          <div class="field"><label>Mẫu nội dung</label><select id="templateSelect"><option value="">-- Không dùng mẫu --</option></select></div>
+          <div class="field"><label>Nội dung</label><textarea id="content" placeholder="Nhập nội dung quảng bá..."></textarea></div>
+          <div class="field"><label>Ảnh</label><input id="imageInput" type="file" accept="image/*"><div class="imgbox" id="imageState">Chưa chọn ảnh</div></div>
+          <div class="field"><label>Nền tảng</label><div class="row"><label class="platform"><input type="checkbox" value="facebook" class="platformCb"> Facebook Page</label><label class="platform"><input type="checkbox" value="instagram" class="platformCb"> Instagram</label></div></div>
+          <div class="field"><label>Thời gian đăng</label><input id="schedule" type="datetime-local"><div class="muted">Để trống = đăng ngay.</div></div>
+          <div class="row"><button class="btn primary" id="publishBtn">Tạo bài</button><button class="btn secondary" id="clearBtn">Xóa nội dung</button></div>
+        </div>
+        <div class="card">
+          <h2>Xem trước</h2>
+          <img id="previewImg" class="thumb hidden" alt="preview">
+          <div class="preview" id="previewText">Nội dung sẽ hiển thị ở đây.</div>
+          <div class="muted" style="margin-top:12px">V1 dùng cùng nội dung cho Facebook và Instagram. V2 sẽ sinh biến thể riêng theo từng nền tảng.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-history" class="hidden">
+      <div class="kpi">
+        <div class="card"><span class="muted">Tổng target</span><strong id="kpiTotal">0</strong></div>
+        <div class="card"><span class="muted">Đã đăng</span><strong id="kpiOk">0</strong></div>
+        <div class="card"><span class="muted">Lỗi</span><strong id="kpiFail">0</strong></div>
+      </div>
+      <div class="card"><h2>Lịch sử đăng bài</h2><div id="postList"></div></div>
+    </section>
+
+    <section id="tab-brand" class="hidden">
+      <div class="card">
+        <h2>Hồ sơ thương hiệu</h2>
+        <div id="brandMsg"></div>
+        <div class="split">
+          <div class="field"><label>Tên thương hiệu</label><input id="bName"></div>
+          <div class="field"><label>Slogan</label><input id="bSlogan"></div>
+          <div class="field"><label>Điện thoại</label><input id="bPhone"></div>
+          <div class="field"><label>Giờ mở cửa</label><input id="bHours"></div>
+        </div>
+        <div class="field"><label>Địa chỉ</label><input id="bAddress"></div>
+        <div class="field"><label>Link Google Maps</label><input id="bMap"></div>
+        <button class="btn primary" id="saveBrandBtn">Lưu thương hiệu</button>
+      </div>
+    </section>
+  </div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+let uploadedUrl=''; let templates=[];
+async function api(url,opt={}){const r=await fetch(url,{headers:{'Content-Type':'application/json',...(opt.headers||{})},...opt});let d={};try{d=await r.json()}catch{}if(!r.ok)throw new Error(d.error||'Có lỗi xảy ra');return d}
+function msg(el,text,error=false){el.innerHTML=text?`<div class="notice ${error?'error':''}">${escapeHtml(text)}</div>`:''}
+function escapeHtml(s=''){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function fmt(s){if(!s)return 'Đăng ngay';return new Date(s).toLocaleString('vi-VN')}
+async function init(){const me=await api('/api/me');if(!me.authenticated){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');return}$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');await Promise.all([loadBrand(),loadTemplates(),loadPosts()])}
+$('#loginForm').onsubmit=async e=>{e.preventDefault();try{await api('/api/login',{method:'POST',body:JSON.stringify({user:$('#loginUser').value,password:$('#loginPass').value})});msg($('#loginMsg'),'');await init()}catch(err){msg($('#loginMsg'),err.message,true)}};
+$('#logoutBtn').onclick=async()=>{await api('/api/logout',{method:'POST'});location.reload()}; $('#refreshBtn').onclick=()=>init();
+$$('.tab').forEach(b=>b.onclick=()=>{const t=b.dataset.tab;$$('.tab').forEach(x=>{x.classList.remove('active');x.classList.add('secondary')});b.classList.add('active');b.classList.remove('secondary');['compose','history','brand'].forEach(x=>$('#tab-'+x).classList.toggle('hidden',x!==t));if(t==='history')loadPosts()});
+async function loadBrand(){const b=await api('/api/brand');$('#bName').value=b.name||'';$('#bSlogan').value=b.slogan||'';$('#bPhone').value=b.phone||'';$('#bHours').value=b.opening_hours||'';$('#bAddress').value=b.address||'';$('#bMap').value=b.map_url||'';$('#brandSubtitle').textContent=(b.name?b.name+' • ':'')+'V1.0.0'}
+$('#saveBrandBtn').onclick=async()=>{try{await api('/api/brand',{method:'PUT',body:JSON.stringify({name:$('#bName').value,slogan:$('#bSlogan').value,phone:$('#bPhone').value,opening_hours:$('#bHours').value,address:$('#bAddress').value,map_url:$('#bMap').value})});msg($('#brandMsg'),'Đã lưu hồ sơ thương hiệu');await loadBrand();await loadTemplates()}catch(e){msg($('#brandMsg'),e.message,true)}};
+async function loadTemplates(){templates=await api('/api/templates');$('#templateSelect').innerHTML='<option value="">-- Không dùng mẫu --</option>'+templates.map(t=>`<option value="${t.id}">${escapeHtml(t.category)} - ${escapeHtml(t.name)}</option>`).join('')}
+$('#templateSelect').onchange=()=>{const t=templates.find(x=>String(x.id)===$('#templateSelect').value);if(t){$('#content').value=t.rendered;updatePreview()}};
+$('#content').oninput=updatePreview;function updatePreview(){$('#previewText').textContent=$('#content').value||'Nội dung sẽ hiển thị ở đây.'}
+$('#imageInput').onchange=async()=>{const f=$('#imageInput').files[0];if(!f)return;const fd=new FormData();fd.append('image',f);$('#imageState').textContent='Đang tải ảnh...';try{const r=await fetch('/api/upload',{method:'POST',body:fd});const d=await r.json();if(!r.ok)throw new Error(d.error||'Upload lỗi');uploadedUrl=d.url;$('#imageState').textContent='Đã tải ảnh';$('#previewImg').src=uploadedUrl;$('#previewImg').classList.remove('hidden')}catch(e){uploadedUrl='';$('#imageState').textContent=e.message}};
+$('#clearBtn').onclick=()=>{$('#content').value='';$('#templateSelect').value='';$('#schedule').value='';uploadedUrl='';$('#imageInput').value='';$('#previewImg').classList.add('hidden');$('#imageState').textContent='Chưa chọn ảnh';updatePreview()};
+$('#publishBtn').onclick=async()=>{const platforms=$$('.platformCb:checked').map(x=>x.value);const scheduled=$('#schedule').value?new Date($('#schedule').value).toISOString():null;try{await api('/api/posts',{method:'POST',body:JSON.stringify({content:$('#content').value,platforms,image_url:uploadedUrl,scheduled_at:scheduled})});msg($('#composeMsg'),'Đã tạo bài. Hệ thống sẽ đăng theo lịch.');$('#clearBtn').click();await loadPosts()}catch(e){msg($('#composeMsg'),e.message,true)}};
+async function loadPosts(){const posts=await api('/api/posts');const targets=posts.flatMap(p=>p.targets);$('#kpiTotal').textContent=targets.length;$('#kpiOk').textContent=targets.filter(t=>t.status==='PUBLISHED').length;$('#kpiFail').textContent=targets.filter(t=>t.status==='FAILED').length;$('#postList').innerHTML=posts.length?posts.map(renderPost).join(''):'<div class="muted">Chưa có bài đăng.</div>';$$('[data-retry]').forEach(b=>b.onclick=async()=>{try{await api('/api/targets/'+b.dataset.retry+'/retry',{method:'POST'});await loadPosts()}catch(e){alert(e.message)}})}
+function renderPost(p){return `<div class="post"><div class="muted">#${p.id} • ${fmt(p.scheduled_at)} • tạo ${fmt(p.created_at)}</div>${p.image_url?`<img class="thumb" style="max-width:320px;margin:10px 0" src="${escapeHtml(p.image_url)}">`:''}<div class="post-content">${escapeHtml(p.content)}</div><div class="row" style="margin-top:10px">${p.targets.map(t=>`<div><span class="status ${t.status}">${escapeHtml(t.platform.toUpperCase())}: ${escapeHtml(t.status)}</span>${t.error?` <span class="small" title="${escapeHtml(t.error)}">${escapeHtml(t.error)}</span>`:''}${t.status==='FAILED'?` <button class="btn secondary small" data-retry="${t.id}">Retry</button>`:''}</div>`).join('')}</div></div>`}
+init().catch(console.error);
+</script>
+</body>
+</html>
