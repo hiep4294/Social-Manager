@@ -7,6 +7,16 @@ export async function publishFacebook({ message, imageUrl, pageId, accessToken }
     throw new Error('Facebook chưa được kết nối hoặc thiếu Page Access Token');
   }
 
+  if (process.env.DEMO_MODE === 'true') {
+    return {
+      id: `demo-facebook-${Date.now()}`,
+      demo: true,
+      page_id: resolvedPageId,
+      has_image: Boolean(imageUrl),
+      message_length: String(message || '').length
+    };
+  }
+
   const endpoint = imageUrl
     ? `https://graph.facebook.com/${version}/${resolvedPageId}/photos`
     : `https://graph.facebook.com/${version}/${resolvedPageId}/feed`;
