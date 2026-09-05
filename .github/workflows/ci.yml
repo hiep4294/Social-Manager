@@ -15,5 +15,9 @@ jobs:
           node-version: 22
       - run: npm install
       - run: node --check src/server.js
+      - run: node --check src/meta-oauth.js
+      - run: node --check src/security.js
       - run: node --check src/platforms/facebook.js
       - run: node --check src/platforms/instagram.js
+      - name: Check inline browser JavaScript syntax
+        run: node -e "const fs=require('fs');const html=fs.readFileSync('public/index.html','utf8');const m=html.match(/<script>([\\s\\S]*)<\\/script>/);if(!m)throw new Error('Missing script');new Function(m[1]);"
