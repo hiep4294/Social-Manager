@@ -5,7 +5,9 @@
   "description": "Social Manager V1.1 for multi-brand local business marketing",
   "type": "module",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "demo": "node scripts/start-demo.mjs",
+    "test:smoke": "node scripts/smoke-test.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",
