@@ -3,18 +3,19 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Social Manager V1</title>
+  <title>Social Manager V1.1</title>
   <style>
     :root{font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;color:#17202a;background:#f4f6f8}
-    *{box-sizing:border-box} body{margin:0} button,input,textarea,select{font:inherit}
-    .hidden{display:none!important}.app{max-width:1280px;margin:auto;padding:20px}.top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:18px}.brandTitle{font-weight:800;font-size:22px}.muted{color:#667085;font-size:13px}.grid{display:grid;grid-template-columns:1.2fr .8fr;gap:18px}.card{background:white;border:1px solid #e4e7ec;border-radius:14px;padding:18px;box-shadow:0 2px 8px rgba(16,24,40,.04)}h2{font-size:18px;margin:0 0 14px}.row{display:flex;gap:10px;flex-wrap:wrap}.field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}.field label{font-size:13px;font-weight:700}.field input,.field textarea,.field select{border:1px solid #d0d5dd;border-radius:10px;padding:10px 12px;background:#fff}.field textarea{min-height:170px;resize:vertical}.btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}.primary{background:#101828;color:#fff}.secondary{background:#eef2f6;color:#101828}.danger{background:#fff0f0;color:#b42318}.platform{display:inline-flex;align-items:center;gap:6px;padding:9px 11px;border:1px solid #d0d5dd;border-radius:10px;background:white}.preview{border:1px solid #e4e7ec;border-radius:12px;padding:14px;background:#fafafa;white-space:pre-wrap;min-height:120px}.status{font-size:12px;font-weight:800;padding:5px 8px;border-radius:999px;display:inline-block}.PUBLISHED{background:#ecfdf3;color:#027a48}.FAILED{background:#fef3f2;color:#b42318}.PENDING,.PROCESSING{background:#fffaeb;color:#b54708}.post{border-top:1px solid #eaecf0;padding:14px 0}.post:first-child{border-top:0}.post-content{white-space:pre-wrap;font-size:14px}.thumb{width:100%;max-height:280px;object-fit:cover;border-radius:10px;border:1px solid #eaecf0}.login{min-height:100vh;display:grid;place-items:center;padding:20px}.login .card{width:min(420px,100%)}.notice{padding:10px 12px;border-radius:10px;background:#eef4ff;color:#3538cd;font-size:13px;margin-bottom:12px}.error{background:#fef3f2;color:#b42318}.tabs{display:flex;gap:8px;margin-bottom:15px;flex-wrap:wrap}.tab.active{background:#101828;color:white}.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}.kpi .card{padding:14px}.kpi strong{font-size:24px;display:block}.small{font-size:12px}.imgbox{font-size:13px;color:#475467}.split{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:850px){.grid,.split{grid-template-columns:1fr}.kpi{grid-template-columns:1fr}.app{padding:12px}}
+    *{box-sizing:border-box}body{margin:0}button,input,textarea,select{font:inherit}.hidden{display:none!important}
+    .app{max-width:1380px;margin:auto;padding:20px}.top{display:flex;gap:14px;align-items:center;justify-content:space-between;margin-bottom:18px}.topRight{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.brandTitle{font-weight:800;font-size:22px}.muted{color:#667085;font-size:13px}.small{font-size:12px}.grid{display:grid;grid-template-columns:1.2fr .8fr;gap:18px}.card{background:#fff;border:1px solid #e4e7ec;border-radius:14px;padding:18px;box-shadow:0 2px 8px rgba(16,24,40,.04)}h2{font-size:18px;margin:0 0 14px}h3{font-size:15px;margin:0 0 10px}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}.field label{font-size:13px;font-weight:700}.field input,.field textarea,.field select,.brandPicker{border:1px solid #d0d5dd;border-radius:10px;padding:10px 12px;background:#fff}.field textarea{min-height:170px;resize:vertical}.btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}.btn:disabled{opacity:.45;cursor:not-allowed}.primary{background:#101828;color:#fff}.secondary{background:#eef2f6;color:#101828}.danger{background:#fff0f0;color:#b42318}.success{background:#ecfdf3;color:#027a48}.platform{display:inline-flex;align-items:center;gap:6px;padding:9px 11px;border:1px solid #d0d5dd;border-radius:10px;background:#fff}.preview{border:1px solid #e4e7ec;border-radius:12px;padding:14px;background:#fafafa;white-space:pre-wrap;min-height:120px}.status{font-size:12px;font-weight:800;padding:5px 8px;border-radius:999px;display:inline-block}.PUBLISHED{background:#ecfdf3;color:#027a48}.FAILED{background:#fef3f2;color:#b42318}.PENDING,.PROCESSING{background:#fffaeb;color:#b54708}.post{border-top:1px solid #eaecf0;padding:14px 0}.post:first-child{border-top:0}.post-content{white-space:pre-wrap;font-size:14px}.thumb{width:100%;max-height:280px;object-fit:cover;border-radius:10px;border:1px solid #eaecf0}.login{min-height:100vh;display:grid;place-items:center;padding:20px}.login .card{width:min(420px,100%)}.notice{padding:10px 12px;border-radius:10px;background:#eef4ff;color:#3538cd;font-size:13px;margin-bottom:12px}.notice.error{background:#fef3f2;color:#b42318}.notice.ok{background:#ecfdf3;color:#027a48}.tabs{display:flex;gap:8px;margin-bottom:15px;flex-wrap:wrap}.tab.active{background:#101828;color:#fff}.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}.kpi .card{padding:14px}.kpi strong{font-size:24px;display:block}.imgbox{font-size:13px;color:#475467}.split{display:grid;grid-template-columns:1fr 1fr;gap:10px}.listItem{border:1px solid #e4e7ec;border-radius:12px;padding:12px;margin-bottom:10px}.listItem:last-child{margin-bottom:0}.accountIcon{width:34px;height:34px;border-radius:10px;background:#eef2f6;display:grid;place-items:center;font-weight:800}.between{display:flex;align-items:center;justify-content:space-between;gap:12px}.modal{position:fixed;inset:0;background:rgba(16,24,40,.55);display:grid;place-items:center;padding:20px;z-index:20}.modal .card{width:min(680px,100%);max-height:85vh;overflow:auto}.pageChoice{display:block;border:1px solid #d0d5dd;border-radius:12px;padding:12px;margin-bottom:10px;cursor:pointer}.pageChoice:has(input:checked){border-color:#101828;background:#f9fafb}.calendarToolbar{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.calendarGrid{display:grid;grid-template-columns:repeat(7,1fr);border-left:1px solid #e4e7ec;border-top:1px solid #e4e7ec}.dow{font-weight:700;font-size:12px;text-align:center;padding:9px;background:#f9fafb;border-right:1px solid #e4e7ec;border-bottom:1px solid #e4e7ec}.day{min-height:125px;padding:7px;border-right:1px solid #e4e7ec;border-bottom:1px solid #e4e7ec;background:#fff}.day.outside{background:#fafafa;color:#98a2b3}.day.today{box-shadow:inset 0 0 0 2px #101828}.dayNum{font-size:12px;font-weight:800;margin-bottom:6px}.event{display:block;padding:5px 6px;border-radius:7px;background:#eef2f6;margin-bottom:4px;font-size:11px;line-height:1.25;overflow:hidden;cursor:default}.event.failed{background:#fef3f2}.event.published{background:#ecfdf3}.weekGrid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}.weekDay{min-height:320px;border:1px solid #e4e7ec;border-radius:10px;padding:9px;background:#fff}.weekDay.today{border-color:#101828}.tableWrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid #eaecf0;font-size:13px;vertical-align:top}th{color:#475467;background:#f9fafb}.pill{display:inline-block;border-radius:999px;padding:4px 8px;background:#eef2f6;font-size:11px;font-weight:700}.brandRowActive{background:#f9fafb}
+    @media(max-width:900px){.grid,.split{grid-template-columns:1fr}.kpi{grid-template-columns:1fr}.app{padding:12px}.calendarGrid{min-width:850px}.calendarScroll{overflow:auto}.weekGrid{min-width:900px}.top{align-items:flex-start;flex-direction:column}.topRight{width:100%}.brandPicker{flex:1;min-width:200px}}
   </style>
 </head>
 <body>
   <div id="loginView" class="login">
     <div class="card">
-      <h2>Social Manager V1</h2>
-      <p class="muted">Quản lý nội dung cho quán ăn và cửa hàng.</p>
+      <h2>Social Manager V1.1</h2>
+      <p class="muted">Quản lý marketing cho nhiều thương hiệu và chi nhánh.</p>
       <div id="loginMsg"></div>
       <form id="loginForm">
         <div class="field"><label>Tài khoản</label><input id="loginUser" value="admin" autocomplete="username"></div>
@@ -26,14 +27,21 @@
 
   <div id="appView" class="app hidden">
     <div class="top">
-      <div><div class="brandTitle">Social Manager</div><div class="muted" id="brandSubtitle">V1.0.0</div></div>
-      <div class="row"><button class="btn secondary" id="refreshBtn">Làm mới</button><button class="btn danger" id="logoutBtn">Đăng xuất</button></div>
+      <div><div class="brandTitle">Social Manager</div><div class="muted" id="brandSubtitle">V1.1.0</div></div>
+      <div class="topRight">
+        <select id="brandSelect" class="brandPicker" title="Thương hiệu/chi nhánh"></select>
+        <button class="btn secondary" id="refreshBtn">Làm mới</button>
+        <button class="btn danger" id="logoutBtn">Đăng xuất</button>
+      </div>
     </div>
 
+    <div id="globalMsg"></div>
     <div class="tabs">
       <button class="btn tab active" data-tab="compose">Soạn bài</button>
+      <button class="btn tab secondary" data-tab="calendar">Lịch marketing</button>
       <button class="btn tab secondary" data-tab="history">Lịch sử</button>
-      <button class="btn tab secondary" data-tab="brand">Thương hiệu</button>
+      <button class="btn tab secondary" data-tab="connections">Kết nối MXH</button>
+      <button class="btn tab secondary" data-tab="brands">Thương hiệu/Chi nhánh</button>
     </div>
 
     <section id="tab-compose">
@@ -44,16 +52,32 @@
           <div class="field"><label>Mẫu nội dung</label><select id="templateSelect"><option value="">-- Không dùng mẫu --</option></select></div>
           <div class="field"><label>Nội dung</label><textarea id="content" placeholder="Nhập nội dung quảng bá..."></textarea></div>
           <div class="field"><label>Ảnh</label><input id="imageInput" type="file" accept="image/*"><div class="imgbox" id="imageState">Chưa chọn ảnh</div></div>
-          <div class="field"><label>Nền tảng</label><div class="row"><label class="platform"><input type="checkbox" value="facebook" class="platformCb"> Facebook Page</label><label class="platform"><input type="checkbox" value="instagram" class="platformCb"> Instagram</label></div></div>
+          <div class="field"><label>Nền tảng</label><div class="row"><label class="platform"><input type="checkbox" value="facebook" class="platformCb"> Facebook Page</label><label class="platform"><input type="checkbox" value="instagram" class="platformCb"> Instagram</label></div><div class="muted" id="connectionHint"></div></div>
           <div class="field"><label>Thời gian đăng</label><input id="schedule" type="datetime-local"><div class="muted">Để trống = đăng ngay.</div></div>
           <div class="row"><button class="btn primary" id="publishBtn">Tạo bài</button><button class="btn secondary" id="clearBtn">Xóa nội dung</button></div>
         </div>
         <div class="card">
           <h2>Xem trước</h2>
+          <div class="muted" id="composeBrandName" style="margin-bottom:10px"></div>
           <img id="previewImg" class="thumb hidden" alt="preview">
           <div class="preview" id="previewText">Nội dung sẽ hiển thị ở đây.</div>
-          <div class="muted" style="margin-top:12px">V1 dùng cùng nội dung cho Facebook và Instagram. V2 sẽ sinh biến thể riêng theo từng nền tảng.</div>
         </div>
+      </div>
+    </section>
+
+    <section id="tab-calendar" class="hidden">
+      <div class="card">
+        <div class="calendarToolbar">
+          <div><h2 style="margin-bottom:3px">Lịch marketing</h2><div class="muted" id="calendarTitle"></div></div>
+          <div class="row">
+            <button class="btn secondary" id="calPrev">‹</button>
+            <button class="btn secondary" id="calToday">Hôm nay</button>
+            <button class="btn secondary" id="calNext">›</button>
+            <button class="btn primary" id="calMonth">Tháng</button>
+            <button class="btn secondary" id="calWeek">Tuần</button>
+          </div>
+        </div>
+        <div id="calendarBody"></div>
       </div>
     </section>
 
@@ -66,45 +90,124 @@
       <div class="card"><h2>Lịch sử đăng bài</h2><div id="postList"></div></div>
     </section>
 
-    <section id="tab-brand" class="hidden">
-      <div class="card">
-        <h2>Hồ sơ thương hiệu</h2>
-        <div id="brandMsg"></div>
-        <div class="split">
-          <div class="field"><label>Tên thương hiệu</label><input id="bName"></div>
-          <div class="field"><label>Slogan</label><input id="bSlogan"></div>
-          <div class="field"><label>Điện thoại</label><input id="bPhone"></div>
-          <div class="field"><label>Giờ mở cửa</label><input id="bHours"></div>
+    <section id="tab-connections" class="hidden">
+      <div class="grid">
+        <div class="card">
+          <h2>Facebook / Instagram</h2>
+          <div id="metaMsg"></div>
+          <p class="muted">Kết nối bằng OAuth. Không cần nhập Access Token thủ công vào giao diện.</p>
+          <button class="btn primary" id="connectMetaBtn">Kết nối Facebook / Instagram</button>
+          <div class="muted" id="metaRedirect" style="margin-top:10px"></div>
         </div>
-        <div class="field"><label>Địa chỉ</label><input id="bAddress"></div>
-        <div class="field"><label>Link Google Maps</label><input id="bMap"></div>
-        <button class="btn primary" id="saveBrandBtn">Lưu thương hiệu</button>
+        <div class="card">
+          <h2>Tài khoản đang kết nối</h2>
+          <div id="accountList"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-brands" class="hidden">
+      <div class="grid">
+        <div class="card">
+          <div class="between"><h2>Danh sách thương hiệu/chi nhánh</h2><button class="btn secondary" id="newBrandBtn">+ Thêm mới</button></div>
+          <div class="tableWrap"><table><thead><tr><th>Tên</th><th>Loại</th><th>Thuộc</th><th>Địa chỉ</th><th></th></tr></thead><tbody id="brandTable"></tbody></table></div>
+        </div>
+        <div class="card">
+          <h2 id="brandFormTitle">Thêm thương hiệu/chi nhánh</h2>
+          <div id="brandMsg"></div>
+          <input type="hidden" id="bId">
+          <div class="split">
+            <div class="field"><label>Loại</label><select id="bKind"><option value="BRAND">Thương hiệu</option><option value="BRANCH">Chi nhánh</option></select></div>
+            <div class="field" id="parentField"><label>Thuộc thương hiệu</label><select id="bParent"></select></div>
+          </div>
+          <div class="split">
+            <div class="field"><label>Tên</label><input id="bName"></div>
+            <div class="field"><label>Slogan</label><input id="bSlogan"></div>
+            <div class="field"><label>Điện thoại</label><input id="bPhone"></div>
+            <div class="field"><label>Giờ mở cửa</label><input id="bHours"></div>
+          </div>
+          <div class="field"><label>Địa chỉ</label><input id="bAddress"></div>
+          <div class="field"><label>Link Google Maps</label><input id="bMap"></div>
+          <div class="row"><button class="btn primary" id="saveBrandBtn">Lưu</button><button class="btn secondary" id="cancelBrandBtn">Làm mới form</button></div>
+        </div>
       </div>
     </section>
   </div>
 
+  <div id="oauthModal" class="modal hidden">
+    <div class="card">
+      <div class="between"><div><h2>Chọn Facebook Page</h2><div class="muted">Page được chọn sẽ gắn với thương hiệu/chi nhánh hiện tại. Instagram liên kết với Page sẽ được thêm cùng.</div></div><button class="btn secondary" id="oauthClose">Đóng</button></div>
+      <div id="oauthPages" style="margin-top:14px"></div>
+      <button class="btn primary" id="oauthComplete" style="width:100%">Hoàn tất kết nối</button>
+    </div>
+  </div>
+
 <script>
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-let uploadedUrl=''; let templates=[];
-async function api(url,opt={}){const r=await fetch(url,{headers:{'Content-Type':'application/json',...(opt.headers||{})},...opt});let d={};try{d=await r.json()}catch{}if(!r.ok)throw new Error(d.error||'Có lỗi xảy ra');return d}
-function msg(el,text,error=false){el.innerHTML=text?`<div class="notice ${error?'error':''}">${escapeHtml(text)}</div>`:''}
-function escapeHtml(s=''){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+let uploadedUrl='', templates=[], brands=[], accounts=[], activeBrandId=0;
+let calendarMode='month', calendarCursor=new Date(), calendarPosts=[];
+
+async function api(url,opt={}){const cfg={...opt};if(!(cfg.body instanceof FormData)){cfg.headers={'Content-Type':'application/json',...(cfg.headers||{})}}const r=await fetch(url,cfg);let d={};try{d=await r.json()}catch{}if(!r.ok)throw new Error(d.error||'Có lỗi xảy ra');return d}
+function msg(el,text,error=false,ok=false){el.innerHTML=text?`<div class="notice ${error?'error':ok?'ok':''}">${escapeHtml(text)}</div>`:''}
+function escapeHtml(s=''){return String(s).replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]))}
 function fmt(s){if(!s)return 'Đăng ngay';return new Date(s).toLocaleString('vi-VN')}
-async function init(){const me=await api('/api/me');if(!me.authenticated){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');return}$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');await Promise.all([loadBrand(),loadTemplates(),loadPosts()])}
+function dayKey(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function selectedBrand(){return brands.find(b=>Number(b.id)===Number(activeBrandId))||null}
+function brandLabel(b){return b.kind==='BRANCH'&&b.parent_name?`${b.parent_name} › ${b.name}`:b.name}
+function switchTab(name){$$('.tab').forEach(x=>{const on=x.dataset.tab===name;x.classList.toggle('active',on);x.classList.toggle('secondary',!on)});['compose','calendar','history','connections','brands'].forEach(x=>$('#tab-'+x).classList.toggle('hidden',x!==name));if(name==='calendar')loadCalendar();if(name==='history')loadPosts();if(name==='connections')loadConnections();if(name==='brands')renderBrands()}
+
+async function init(){const me=await api('/api/me');if(!me.authenticated){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');return}$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');await loadBrands();await Promise.all([loadTemplates(),loadPosts(),loadConnections()]);handleOAuthReturn()}
+
 $('#loginForm').onsubmit=async e=>{e.preventDefault();try{await api('/api/login',{method:'POST',body:JSON.stringify({user:$('#loginUser').value,password:$('#loginPass').value})});msg($('#loginMsg'),'');await init()}catch(err){msg($('#loginMsg'),err.message,true)}};
-$('#logoutBtn').onclick=async()=>{await api('/api/logout',{method:'POST'});location.reload()}; $('#refreshBtn').onclick=()=>init();
-$$('.tab').forEach(b=>b.onclick=()=>{const t=b.dataset.tab;$$('.tab').forEach(x=>{x.classList.remove('active');x.classList.add('secondary')});b.classList.add('active');b.classList.remove('secondary');['compose','history','brand'].forEach(x=>$('#tab-'+x).classList.toggle('hidden',x!==t));if(t==='history')loadPosts()});
-async function loadBrand(){const b=await api('/api/brand');$('#bName').value=b.name||'';$('#bSlogan').value=b.slogan||'';$('#bPhone').value=b.phone||'';$('#bHours').value=b.opening_hours||'';$('#bAddress').value=b.address||'';$('#bMap').value=b.map_url||'';$('#brandSubtitle').textContent=(b.name?b.name+' • ':'')+'V1.0.0'}
-$('#saveBrandBtn').onclick=async()=>{try{await api('/api/brand',{method:'PUT',body:JSON.stringify({name:$('#bName').value,slogan:$('#bSlogan').value,phone:$('#bPhone').value,opening_hours:$('#bHours').value,address:$('#bAddress').value,map_url:$('#bMap').value})});msg($('#brandMsg'),'Đã lưu hồ sơ thương hiệu');await loadBrand();await loadTemplates()}catch(e){msg($('#brandMsg'),e.message,true)}};
-async function loadTemplates(){templates=await api('/api/templates');$('#templateSelect').innerHTML='<option value="">-- Không dùng mẫu --</option>'+templates.map(t=>`<option value="${t.id}">${escapeHtml(t.category)} - ${escapeHtml(t.name)}</option>`).join('')}
+$('#logoutBtn').onclick=async()=>{await api('/api/logout',{method:'POST'});location.reload()};
+$('#refreshBtn').onclick=()=>init();
+$$('.tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
+
+async function loadBrands(){brands=await api('/api/brands');if(!brands.length)throw new Error('Không có thương hiệu hoạt động');const saved=Number(localStorage.getItem('socialManagerBrandId'));activeBrandId=brands.some(b=>Number(b.id)===saved)?saved:Number(brands[0].id);$('#brandSelect').innerHTML=brands.map(b=>`<option value="${b.id}">${escapeHtml(brandLabel(b))}</option>`).join('');$('#brandSelect').value=String(activeBrandId);updateBrandContext();renderBrands()}
+function updateBrandContext(){const b=selectedBrand();$('#brandSubtitle').textContent=(b?brandLabel(b)+' • ':'')+'V1.1.0';$('#composeBrandName').textContent=b?`Đang soạn cho: ${brandLabel(b)}`:'';localStorage.setItem('socialManagerBrandId',String(activeBrandId))}
+$('#brandSelect').onchange=async()=>{activeBrandId=Number($('#brandSelect').value);updateBrandContext();$('#clearBtn').click();await Promise.all([loadTemplates(),loadPosts(),loadConnections()]);if(!$('#tab-calendar').classList.contains('hidden'))await loadCalendar()};
+
+async function loadTemplates(){if(!activeBrandId)return;templates=await api('/api/templates?brand_id='+activeBrandId);$('#templateSelect').innerHTML='<option value="">-- Không dùng mẫu --</option>'+templates.map(t=>`<option value="${t.id}">${escapeHtml(t.category)} - ${escapeHtml(t.name)}</option>`).join('')}
 $('#templateSelect').onchange=()=>{const t=templates.find(x=>String(x.id)===$('#templateSelect').value);if(t){$('#content').value=t.rendered;updatePreview()}};
 $('#content').oninput=updatePreview;function updatePreview(){$('#previewText').textContent=$('#content').value||'Nội dung sẽ hiển thị ở đây.'}
+
 $('#imageInput').onchange=async()=>{const f=$('#imageInput').files[0];if(!f)return;const fd=new FormData();fd.append('image',f);$('#imageState').textContent='Đang tải ảnh...';try{const r=await fetch('/api/upload',{method:'POST',body:fd});const d=await r.json();if(!r.ok)throw new Error(d.error||'Upload lỗi');uploadedUrl=d.url;$('#imageState').textContent='Đã tải ảnh';$('#previewImg').src=uploadedUrl;$('#previewImg').classList.remove('hidden')}catch(e){uploadedUrl='';$('#imageState').textContent=e.message}};
-$('#clearBtn').onclick=()=>{$('#content').value='';$('#templateSelect').value='';$('#schedule').value='';uploadedUrl='';$('#imageInput').value='';$('#previewImg').classList.add('hidden');$('#imageState').textContent='Chưa chọn ảnh';updatePreview()};
-$('#publishBtn').onclick=async()=>{const platforms=$$('.platformCb:checked').map(x=>x.value);const scheduled=$('#schedule').value?new Date($('#schedule').value).toISOString():null;try{await api('/api/posts',{method:'POST',body:JSON.stringify({content:$('#content').value,platforms,image_url:uploadedUrl,scheduled_at:scheduled})});msg($('#composeMsg'),'Đã tạo bài. Hệ thống sẽ đăng theo lịch.');$('#clearBtn').click();await loadPosts()}catch(e){msg($('#composeMsg'),e.message,true)}};
-async function loadPosts(){const posts=await api('/api/posts');const targets=posts.flatMap(p=>p.targets);$('#kpiTotal').textContent=targets.length;$('#kpiOk').textContent=targets.filter(t=>t.status==='PUBLISHED').length;$('#kpiFail').textContent=targets.filter(t=>t.status==='FAILED').length;$('#postList').innerHTML=posts.length?posts.map(renderPost).join(''):'<div class="muted">Chưa có bài đăng.</div>';$$('[data-retry]').forEach(b=>b.onclick=async()=>{try{await api('/api/targets/'+b.dataset.retry+'/retry',{method:'POST'});await loadPosts()}catch(e){alert(e.message)}})}
+$('#clearBtn').onclick=()=>{$('#content').value='';$('#templateSelect').value='';$('#schedule').value='';uploadedUrl='';$('#imageInput').value='';$$('.platformCb').forEach(x=>x.checked=false);$('#previewImg').classList.add('hidden');$('#imageState').textContent='Chưa chọn ảnh';updatePreview()};
+$('#publishBtn').onclick=async()=>{const platforms=$$('.platformCb:checked').map(x=>x.value);const scheduled=$('#schedule').value?new Date($('#schedule').value).toISOString():null;try{await api('/api/posts',{method:'POST',body:JSON.stringify({brand_id:activeBrandId,content:$('#content').value,platforms,image_url:uploadedUrl,scheduled_at:scheduled})});msg($('#composeMsg'),'Đã tạo bài. Hệ thống sẽ đăng theo lịch.',false,true);$('#clearBtn').click();await loadPosts();if(!$('#tab-calendar').classList.contains('hidden'))await loadCalendar()}catch(e){msg($('#composeMsg'),e.message,true)}};
+
+async function loadPosts(){if(!activeBrandId)return;const posts=await api('/api/posts?brand_id='+activeBrandId);const targets=posts.flatMap(p=>p.targets);$('#kpiTotal').textContent=targets.length;$('#kpiOk').textContent=targets.filter(t=>t.status==='PUBLISHED').length;$('#kpiFail').textContent=targets.filter(t=>t.status==='FAILED').length;$('#postList').innerHTML=posts.length?posts.map(renderPost).join(''):'<div class="muted">Chưa có bài đăng cho thương hiệu/chi nhánh này.</div>';$$('[data-retry]').forEach(b=>b.onclick=async()=>{try{await api('/api/targets/'+b.dataset.retry+'/retry',{method:'POST'});await loadPosts()}catch(e){alert(e.message)}})}
 function renderPost(p){return `<div class="post"><div class="muted">#${p.id} • ${fmt(p.scheduled_at)} • tạo ${fmt(p.created_at)}</div>${p.image_url?`<img class="thumb" style="max-width:320px;margin:10px 0" src="${escapeHtml(p.image_url)}">`:''}<div class="post-content">${escapeHtml(p.content)}</div><div class="row" style="margin-top:10px">${p.targets.map(t=>`<div><span class="status ${t.status}">${escapeHtml(t.platform.toUpperCase())}: ${escapeHtml(t.status)}</span>${t.error?` <span class="small" title="${escapeHtml(t.error)}">${escapeHtml(t.error)}</span>`:''}${t.status==='FAILED'?` <button class="btn secondary small" data-retry="${t.id}">Retry</button>`:''}</div>`).join('')}</div></div>`}
-init().catch(console.error);
+
+async function loadConnections(){if(!activeBrandId)return;try{const [cfg,a]=await Promise.all([api('/api/meta/config'),api('/api/social-accounts?brand_id='+activeBrandId)]);accounts=a;$('#connectMetaBtn').disabled=!cfg.configured;msg($('#metaMsg'),cfg.configured?'Meta OAuth đã sẵn sàng.':'Chưa cấu hình META_APP_ID và META_APP_SECRET trên server.',!cfg.configured,cfg.configured);$('#metaRedirect').textContent='Redirect URI: '+cfg.redirect_uri;renderAccounts()}catch(e){msg($('#metaMsg'),e.message,true)}}
+function renderAccounts(){const map=Object.fromEntries(accounts.map(a=>[a.platform,a]));$('#connectionHint').textContent=`Facebook: ${map.facebook?'đã kết nối':'chưa kết nối'} • Instagram: ${map.instagram?'đã kết nối':'chưa kết nối'}`;$('#accountList').innerHTML=accounts.length?accounts.map(a=>`<div class="listItem between"><div class="row"><div class="accountIcon">${a.platform==='facebook'?'f':'◎'}</div><div><strong>${escapeHtml(a.account_name||a.username||a.account_id)}</strong><div class="muted">${escapeHtml(a.platform==='facebook'?'Facebook Page':'Instagram')} ${a.username?'@'+escapeHtml(a.username):''}</div></div></div><button class="btn danger small" data-disconnect="${a.id}">Ngắt</button></div>`).join(''):'<div class="muted">Chưa kết nối tài khoản mạng xã hội.</div>';$$('[data-disconnect]').forEach(b=>b.onclick=async()=>{if(!confirm('Ngắt kết nối tài khoản này?'))return;try{await api('/api/social-accounts/'+b.dataset.disconnect,{method:'DELETE'});await loadConnections()}catch(e){alert(e.message)}})}
+$('#connectMetaBtn').onclick=()=>{location.href='/api/meta/oauth/start?brand_id='+activeBrandId};
+
+async function handleOAuthReturn(){const q=new URLSearchParams(location.search);if(q.get('oauth_error')){msg($('#globalMsg'),'Kết nối Meta lỗi: '+q.get('oauth_error'),true);history.replaceState({},'',location.pathname);switchTab('connections');return}if(q.get('oauth')==='meta'){history.replaceState({},'',location.pathname);try{const p=await api('/api/meta/oauth/pending');if(p.pending){if(brands.some(b=>Number(b.id)===Number(p.brand_id))){activeBrandId=Number(p.brand_id);$('#brandSelect').value=String(activeBrandId);updateBrandContext()}showOAuthModal(p);switchTab('connections')}}catch(e){msg($('#globalMsg'),e.message,true)}}}
+function showOAuthModal(p){$('#oauthPages').innerHTML=p.pages.map((x,i)=>`<label class="pageChoice"><input type="radio" name="oauthPage" value="${escapeHtml(x.page_id)}" ${i===0?'checked':''}> <strong>${escapeHtml(x.page_name)}</strong><div class="muted">${escapeHtml(x.category||'Facebook Page')}</div>${x.instagram?`<div style="margin-top:6px"><span class="pill">Instagram @${escapeHtml(x.instagram.username||x.instagram.name||x.instagram.id)}</span></div>`:'<div class="muted" style="margin-top:6px">Page này chưa có Instagram Business/Creator liên kết.</div>'}</label>`).join('');$('#oauthModal').classList.remove('hidden')}
+$('#oauthComplete').onclick=async()=>{const chosen=$('input[name="oauthPage"]:checked');if(!chosen)return;try{await api('/api/meta/oauth/complete',{method:'POST',body:JSON.stringify({page_id:chosen.value,connect_instagram:true})});$('#oauthModal').classList.add('hidden');msg($('#globalMsg'),'Đã kết nối Meta thành công.',false,true);await loadConnections()}catch(e){alert(e.message)}};
+$('#oauthClose').onclick=async()=>{try{await api('/api/meta/oauth/cancel',{method:'POST'})}catch{}$('#oauthModal').classList.add('hidden')};
+
+function resetBrandForm(){$('#bId').value='';$('#bKind').value='BRAND';$('#bName').value='';$('#bSlogan').value='';$('#bPhone').value='';$('#bHours').value='';$('#bAddress').value='';$('#bMap').value='';$('#brandFormTitle').textContent='Thêm thương hiệu/chi nhánh';msg($('#brandMsg'),'');updateParentField()}
+function updateParentField(){const branch=$('#bKind').value==='BRANCH';$('#parentField').classList.toggle('hidden',!branch);const current=Number($('#bId').value||0);$('#bParent').innerHTML=brands.filter(b=>b.kind==='BRAND'&&Number(b.id)!==current).map(b=>`<option value="${b.id}">${escapeHtml(b.name)}</option>`).join('')}
+$('#bKind').onchange=updateParentField;$('#newBrandBtn').onclick=resetBrandForm;$('#cancelBrandBtn').onclick=resetBrandForm;
+function renderBrands(){if(!$('#brandTable'))return;$('#brandTable').innerHTML=brands.map(b=>`<tr class="${Number(b.id)===Number(activeBrandId)?'brandRowActive':''}"><td><strong>${escapeHtml(b.name)}</strong><div class="muted">${escapeHtml(b.phone||'')}</div></td><td>${b.kind==='BRANCH'?'Chi nhánh':'Thương hiệu'}</td><td>${escapeHtml(b.parent_name||'-')}</td><td>${escapeHtml(b.address||'-')}</td><td><div class="row"><button class="btn secondary small" data-edit-brand="${b.id}">Sửa</button><button class="btn danger small" data-archive-brand="${b.id}">Ẩn</button></div></td></tr>`).join('');$$('[data-edit-brand]').forEach(btn=>btn.onclick=()=>editBrand(Number(btn.dataset.editBrand)));$$('[data-archive-brand]').forEach(btn=>btn.onclick=()=>archiveBrand(Number(btn.dataset.archiveBrand)));updateParentField()}
+function editBrand(id){const b=brands.find(x=>Number(x.id)===id);if(!b)return;$('#bId').value=b.id;$('#bKind').value=b.kind;updateParentField();if(b.parent_id)$('#bParent').value=String(b.parent_id);$('#bName').value=b.name||'';$('#bSlogan').value=b.slogan||'';$('#bPhone').value=b.phone||'';$('#bHours').value=b.opening_hours||'';$('#bAddress').value=b.address||'';$('#bMap').value=b.map_url||'';$('#brandFormTitle').textContent='Sửa: '+b.name}
+$('#saveBrandBtn').onclick=async()=>{const id=Number($('#bId').value||0);const body={kind:$('#bKind').value,parent_id:$('#bKind').value==='BRANCH'?Number($('#bParent').value||0):null,name:$('#bName').value,slogan:$('#bSlogan').value,phone:$('#bPhone').value,opening_hours:$('#bHours').value,address:$('#bAddress').value,map_url:$('#bMap').value};try{const saved=await api(id?'/api/brands/'+id:'/api/brands',{method:id?'PUT':'POST',body:JSON.stringify(body)});msg($('#brandMsg'),'Đã lưu '+saved.name,false,true);await loadBrands();if(!id){activeBrandId=Number(saved.id);$('#brandSelect').value=String(activeBrandId);updateBrandContext()}resetBrandForm();await Promise.all([loadTemplates(),loadConnections(),loadPosts()])}catch(e){msg($('#brandMsg'),e.message,true)}};
+async function archiveBrand(id){const b=brands.find(x=>Number(x.id)===id);if(!b||!confirm(`Ẩn ${b.name}? Dữ liệu bài đăng cũ vẫn được giữ.`))return;try{await api('/api/brands/'+id,{method:'DELETE'});await loadBrands();await Promise.all([loadTemplates(),loadConnections(),loadPosts()])}catch(e){alert(e.message)}}
+
+function startOfWeek(d){const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()-((x.getDay()+6)%7));return x}
+function calendarRange(){if(calendarMode==='month'){const first=new Date(calendarCursor.getFullYear(),calendarCursor.getMonth(),1);const start=startOfWeek(first);const end=new Date(start);end.setDate(end.getDate()+42);return{start,end}}const start=startOfWeek(calendarCursor);const end=new Date(start);end.setDate(end.getDate()+7);return{start,end}}
+async function loadCalendar(){if(!activeBrandId)return;const {start,end}=calendarRange();calendarPosts=await api(`/api/calendar?brand_id=${activeBrandId}&start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`);renderCalendar()}
+function eventClass(p){if(p.targets.some(t=>t.status==='FAILED'))return'failed';if(p.targets.length&&p.targets.every(t=>t.status==='PUBLISHED'))return'published';return''}
+function eventLabel(p){const d=new Date(p.scheduled_at||p.created_at);return `${d.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})} ${p.content.replace(/\s+/g,' ').slice(0,45)}`}
+function renderCalendar(){const body=$('#calendarBody'),todayKey=dayKey(new Date());if(calendarMode==='month'){const y=calendarCursor.getFullYear(),m=calendarCursor.getMonth();$('#calendarTitle').textContent=`Tháng ${m+1}/${y}`;const {start}=calendarRange();const names=['T2','T3','T4','T5','T6','T7','CN'];let html='<div class="calendarScroll"><div class="calendarGrid">'+names.map(n=>`<div class="dow">${n}</div>`).join('');for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);const key=dayKey(d);const events=calendarPosts.filter(p=>dayKey(new Date(p.scheduled_at||p.created_at))===key);html+=`<div class="day ${d.getMonth()!==m?'outside':''} ${key===todayKey?'today':''}"><div class="dayNum">${d.getDate()}</div>${events.map(p=>`<div class="event ${eventClass(p)}" title="${escapeHtml(p.content)}">${escapeHtml(eventLabel(p))}</div>`).join('')}</div>`}html+='</div></div>';body.innerHTML=html}else{const {start}=calendarRange();const end=new Date(start);end.setDate(end.getDate()+6);$('#calendarTitle').textContent=`${start.toLocaleDateString('vi-VN')} - ${end.toLocaleDateString('vi-VN')}`;let html='<div class="calendarScroll"><div class="weekGrid">';for(let i=0;i<7;i++){const d=new Date(start);d.setDate(start.getDate()+i);const key=dayKey(d);const events=calendarPosts.filter(p=>dayKey(new Date(p.scheduled_at||p.created_at))===key);html+=`<div class="weekDay ${key===todayKey?'today':''}"><strong>${d.toLocaleDateString('vi-VN',{weekday:'short',day:'2-digit',month:'2-digit'})}</strong><div style="margin-top:10px">${events.length?events.map(p=>`<div class="event ${eventClass(p)}" title="${escapeHtml(p.content)}">${escapeHtml(eventLabel(p))}<div class="muted">${p.targets.map(t=>t.platform+': '+t.status).join(' • ')}</div></div>`).join(''):'<div class="muted">Không có bài</div>'}</div></div>`}html+='</div></div>';body.innerHTML=html}}
+$('#calPrev').onclick=async()=>{if(calendarMode==='month')calendarCursor=new Date(calendarCursor.getFullYear(),calendarCursor.getMonth()-1,1);else calendarCursor=new Date(calendarCursor.getFullYear(),calendarCursor.getMonth(),calendarCursor.getDate()-7);await loadCalendar()};
+$('#calNext').onclick=async()=>{if(calendarMode==='month')calendarCursor=new Date(calendarCursor.getFullYear(),calendarCursor.getMonth()+1,1);else calendarCursor=new Date(calendarCursor.getFullYear(),calendarCursor.getMonth(),calendarCursor.getDate()+7);await loadCalendar()};
+$('#calToday').onclick=async()=>{calendarCursor=new Date();await loadCalendar()};
+$('#calMonth').onclick=async()=>{calendarMode='month';$('#calMonth').className='btn primary';$('#calWeek').className='btn secondary';await loadCalendar()};
+$('#calWeek').onclick=async()=>{calendarMode='week';$('#calWeek').className='btn primary';$('#calMonth').className='btn secondary';await loadCalendar()};
+
+resetBrandForm();init().catch(e=>{console.error(e);msg($('#globalMsg'),e.message,true)});
 </script>
 </body>
 </html>
