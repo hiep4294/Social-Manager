@@ -25,6 +25,16 @@ export async function publishInstagram({ message, imageUrl, userId, accessToken 
     throw new Error('Instagram yêu cầu ít nhất 1 ảnh có URL công khai');
   }
 
+  if (process.env.DEMO_MODE === 'true') {
+    return {
+      id: `demo-instagram-${Date.now()}`,
+      demo: true,
+      instagram_user_id: resolvedUserId,
+      image_url: imageUrl,
+      caption_length: String(message || '').length
+    };
+  }
+
   const container = await graphPost(`${resolvedUserId}/media`, {
     image_url: imageUrl,
     caption: message || ''
