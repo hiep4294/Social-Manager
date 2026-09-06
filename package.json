@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node src/server.js",
     "demo": "node scripts/start-demo.mjs",
-    "test:smoke": "node scripts/smoke-test.mjs"
+    "test:facebook": "node tests/facebook.test.mjs",
+    "test:smoke": "node scripts/smoke-test.mjs",
+    "test": "npm run test:facebook && npm run test:smoke"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",
