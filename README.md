@@ -1,4 +1,4 @@
-# Social Manager V1.1
+# Social Manager V1.2.1
 
 Web app quản lý và đăng nội dung marketing cho quán ăn, quán cà phê, cửa hàng và showroom.
 
@@ -18,38 +18,111 @@ Web app quản lý và đăng nội dung marketing cho quán ăn, quán cà phê
 - Lịch sử và trạng thái từng nền tảng: `PENDING`, `PROCESSING`, `PUBLISHED`, `FAILED`.
 - Retry bài lỗi.
 - Scheduler có cơ chế mở lại job bị kẹt sau khi server bị dừng đột ngột.
+- MCP endpoint để ChatGPT/agent gọi `list_brands`, `list_facebook_accounts`, `post_to_facebook`, `get_post_status`.
 - Dashboard responsive cho máy tính và điện thoại.
-- Docker để triển khai VPS.
+- Docker để triển khai VPS sau khi kiểm thử xong.
 
-> TikTok, Zalo OA và Google Business Profile chưa nằm trong V1.1.
+> TikTok, Zalo OA và Google Business Profile chưa nằm trong V1.2.
 
-## Chạy nhanh
+## Quy trình phát triển hiện tại
+
+Ưu tiên kiểm thử trên GitHub trước:
+
+```text
+GitHub source
+  -> GitHub Actions CI
+  -> Codespaces chạy giao diện thật
+  -> Meta OAuth thật
+  -> thử 1 bài Facebook thật
+  -> ổn định mới đưa VPS / máy local
+```
+
+## Chạy demo không đăng thật
 
 ```bash
-cp .env.example .env
 npm install
-npm start
+npm run demo
 ```
 
-Mở `http://localhost:3000`.
+Đăng nhập demo:
 
-## Biến môi trường tối thiểu
-
-```env
-PORT=3000
-SESSION_SECRET=mot-chuoi-ngau-nhien-dai
-TOKEN_ENCRYPTION_KEY=mot-chuoi-ngau-nhien-khac
-ADMIN_USER=admin
-ADMIN_PASSWORD=doi-mat-khau-ngay
-PUBLIC_BASE_URL=https://social.example.com
-COOKIE_SECURE=true
+```text
+admin / admin123
 ```
 
-`TOKEN_ENCRYPTION_KEY` phải được giữ ổn định. Nếu đổi khóa sau khi đã kết nối Meta, các token cũ sẽ không giải mã được và phải kết nối lại.
+`DEMO_MODE=true` nên Facebook/Instagram chỉ được mô phỏng.
 
-## Thiết lập Meta OAuth
+## Kiểm thử tự động
 
-Tạo Meta App và cấu hình:
+```bash
+npm test
+```
+
+Bao gồm:
+
+- Facebook adapter.
+- Meta OAuth URL, state, scope, token exchange, Page discovery và lỗi Meta.
+- MCP control cho ChatGPT.
+- End-to-end smoke test: login, brand/branch, post, scheduler, calendar.
+
+## Kiểm thử Facebook thật bằng GitHub Codespaces
+
+Repo đã có `.devcontainer/devcontainer.json` và script `npm run codespace`.
+
+### 1. Tạo Codespace
+
+Trong GitHub:
+
+```text
+Code -> Codespaces -> Create codespace on main
+```
+
+Port `3000` được cấu hình public để callback OAuth có URL HTTPS.
+
+### 2. Thêm Codespaces secrets
+
+Trong GitHub repo/account Codespaces secrets, thêm:
+
+```text
+META_APP_ID
+META_APP_SECRET
+```
+
+Có thể thêm cố định các giá trị sau để giữ session/token qua lần restart:
+
+```text
+SESSION_SECRET
+TOKEN_ENCRYPTION_KEY
+ADMIN_PASSWORD
+```
+
+Không commit các secret này vào repo.
+
+### 3. Chạy LIVE mode
+
+Trong terminal Codespace:
+
+```bash
+npm run codespace
+```
+
+Script tự tính URL dạng:
+
+```text
+https://<codespace-name>-3000.<codespaces-forwarding-domain>
+```
+
+và in ra chính xác Meta Redirect URI:
+
+```text
+https://<codespace-name>-3000.<codespaces-forwarding-domain>/api/meta/oauth/callback
+```
+
+### 4. Cấu hình Meta App
+
+Đưa đúng Redirect URI mà terminal in ra vào cấu hình OAuth của Meta App.
+
+Biến môi trường Meta:
 
 ```env
 META_GRAPH_VERSION=v23.0
@@ -60,40 +133,45 @@ META_CONFIG_ID=
 META_OAUTH_SCOPES=pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish
 ```
 
-Nếu bỏ trống `META_REDIRECT_URI`, phần mềm tự dùng:
+`META_GRAPH_VERSION` là cấu hình, không hard-code logic vào adapter. Khi Meta yêu cầu version khác chỉ cần thay biến này.
 
-```text
-PUBLIC_BASE_URL/api/meta/oauth/callback
-```
+### 5. Kết nối Facebook
 
-Ví dụ:
+Trong Social Manager:
 
-```text
-https://social.example.com/api/meta/oauth/callback
-```
-
-URI này phải được khai báo tương ứng trong cấu hình OAuth của Meta App.
-
-`META_CONFIG_ID` là tùy chọn cho cấu hình Facebook Login for Business. Nếu App không dùng Config ID thì để trống.
-
-### Luồng kết nối
-
-1. Chọn thương hiệu/chi nhánh trên thanh trên cùng.
+1. Chọn thương hiệu/chi nhánh.
 2. Vào **Kết nối MXH**.
 3. Nhấn **Kết nối Facebook / Instagram**.
 4. Đăng nhập Meta và cấp quyền.
-5. Chọn Facebook Page cần gắn với thương hiệu/chi nhánh.
-6. Nếu Page có Instagram Business/Creator liên kết, hệ thống kết nối Instagram cùng lúc.
+5. Chọn Facebook Page.
+6. Sau khi kết nối thành công, tạo bài Facebook nội dung `xin chào` và để thời gian trống để đăng ngay.
 
-Phần mềm chỉ lưu Page Access Token sau khi mã hóa; không trả token ra API giao diện.
+Khi `DEMO_MODE=false`, adapter gọi Graph API thật và lưu `external_id` Facebook trả về.
 
-## Instagram và ảnh
+## Chạy local/VPS sau này
 
-Instagram Content Publishing cần ảnh có URL mà Meta có thể truy cập. Vì vậy khi chạy trên VPS phải đặt `PUBLIC_BASE_URL` là HTTPS public domain thật. File upload được phục vụ tại `/uploads/...`.
+```bash
+cp .env.example .env
+npm install
+npm start
+```
+
+Các biến tối thiểu:
+
+```env
+PORT=3000
+SESSION_SECRET=mot-chuoi-ngau-nhien-dai
+TOKEN_ENCRYPTION_KEY=mot-chuoi-ngau-nhien-khac
+ADMIN_USER=admin
+ADMIN_PASSWORD=doi-mat-khau-ngay
+PUBLIC_BASE_URL=https://social.example.com
+COOKIE_SECURE=true
+DEMO_MODE=false
+```
+
+`TOKEN_ENCRYPTION_KEY` phải được giữ ổn định. Nếu đổi khóa sau khi đã kết nối Meta, token cũ sẽ không giải mã được và phải OAuth lại.
 
 ## Nhiều thương hiệu / chi nhánh
-
-Mô hình:
 
 ```text
 Thương hiệu A
@@ -104,14 +182,7 @@ Thương hiệu B
 └─ Chi nhánh B1
 ```
 
-Mỗi mục có:
-
-- Brand Kit riêng.
-- Facebook Page riêng.
-- Instagram riêng.
-- Bài đăng và Calendar riêng.
-
-Bài cũ vẫn được giữ nếu một thương hiệu/chi nhánh bị ẩn khỏi giao diện.
+Mỗi mục có Brand Kit, Facebook Page, Instagram, bài đăng và Calendar riêng.
 
 ## Docker
 
@@ -119,46 +190,27 @@ Bài cũ vẫn được giữ nếu một thương hiệu/chi nhánh bị ẩn k
 docker compose up -d --build
 ```
 
-Dữ liệu SQLite và ảnh upload được lưu trong volume `social_manager_data`.
-
-## Cấu trúc
-
-```text
-Social-Manager/
-├─ public/
-│  └─ index.html
-├─ src/
-│  ├─ meta-oauth.js
-│  ├─ security.js
-│  ├─ server.js
-│  └─ platforms/
-│     ├─ facebook.js
-│     └─ instagram.js
-├─ .github/workflows/ci.yml
-├─ .env.example
-├─ .gitignore
-├─ Dockerfile
-├─ compose.yaml
-└─ package.json
-```
+Dữ liệu SQLite và ảnh upload được lưu trong Docker volumes.
 
 ## Nguyên tắc
 
-1. Dùng API chính thức; không dùng Selenium để giả lập đăng nhập.
-2. App Secret và token không được commit lên GitHub.
+1. Dùng API chính thức; không dùng Selenium để giả lập đăng nhập Facebook.
+2. App Secret và token không commit lên GitHub.
 3. OAuth dùng `state` và giới hạn thời gian phiên kết nối.
-4. Một lỗi ở Facebook không làm mất trạng thái Instagram và ngược lại.
-5. Mỗi nền tảng là adapter riêng để mở rộng sau này.
+4. Token được mã hóa trước khi ghi SQLite.
+5. Một lỗi Facebook không làm mất trạng thái Instagram và ngược lại.
 6. Một thương hiệu/chi nhánh hiện gắn tối đa 1 Facebook Page và 1 Instagram account.
+7. Live Facebook test chỉ thực hiện sau khi người dùng tự cấp quyền OAuth cho Meta App.
 
-## Roadmap tiếp theo
+## Roadmap
 
-### V1.2
-- Thư viện media riêng.
+### V1.3
 - Sửa/xóa bài chưa chạy.
 - Kéo thả bài trực tiếp trên Calendar.
-- Thống kê hiệu quả theo thương hiệu/chi nhánh.
-- Lưu session vào persistent store thay cho MemoryStore khi triển khai nhiều process.
+- Thư viện media.
+- Persistent session store.
+- Audit log lệnh MCP/ChatGPT.
+- Xác nhận mục tiêu trước các thao tác đăng hàng loạt.
 
 ### V2
 - TikTok Content Posting API.
