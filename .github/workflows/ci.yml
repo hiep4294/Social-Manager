@@ -21,13 +21,17 @@ jobs:
       - run: node --check src/platforms/instagram.js
       - run: node --check src/mcp-server.js
       - run: node --check scripts/start-demo.mjs
+      - run: node --check scripts/start-codespace.mjs
       - run: node --check scripts/smoke-test.mjs
       - run: node --check tests/facebook.test.mjs
+      - run: node --check tests/meta-oauth.test.mjs
       - run: node --check tests/mcp.test.mjs
       - name: Check inline browser JavaScript syntax
         run: node -e "const fs=require('fs');const html=fs.readFileSync('public/index.html','utf8');const m=html.match(/<script>([\\s\\S]*)<\\/script>/);if(!m)throw new Error('Missing script');new Function(m[1]);"
       - name: Facebook adapter integration test
         run: npm run test:facebook
+      - name: Meta OAuth integration test
+        run: npm run test:meta
       - name: ChatGPT MCP integration test
         run: npm run test:mcp
       - name: End-to-end smoke test
