@@ -1,11 +1,12 @@
 {
-  "name": "Social Manager V1.1",
+  "name": "Social Manager V1.2",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
   "forwardPorts": [3000],
   "portsAttributes": {
     "3000": {
       "label": "Social Manager",
-      "onAutoForward": "openPreview"
+      "onAutoForward": "notify",
+      "visibility": "public"
     }
   },
   "postCreateCommand": "npm install",
