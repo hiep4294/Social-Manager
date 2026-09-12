@@ -1,5 +1,5 @@
 function version() {
-  return process.env.META_GRAPH_VERSION || 'v23.0';
+  return process.env.META_GRAPH_VERSION || 'v26.0';
 }
 
 function required(name) {

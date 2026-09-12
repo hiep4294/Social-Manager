@@ -13,6 +13,7 @@ process.env.PORT = port;
 process.env.PUBLIC_BASE_URL ||= `https://${codespace}-${port}.${forwardingDomain}`;
 process.env.COOKIE_SECURE ||= 'true';
 process.env.DEMO_MODE = 'false';
+process.env.META_GRAPH_VERSION ||= 'v26.0';
 process.env.ADMIN_USER ||= 'admin';
 process.env.ADMIN_PASSWORD ||= `sm-${crypto.randomBytes(9).toString('base64url')}`;
 process.env.SESSION_SECRET ||= crypto.randomBytes(32).toString('hex');
@@ -22,6 +23,7 @@ const redirectUri = process.env.META_REDIRECT_URI || `${process.env.PUBLIC_BASE_
 
 console.log('Social Manager - GitHub Codespaces LIVE mode');
 console.log(`URL: ${process.env.PUBLIC_BASE_URL}`);
+console.log(`Meta Graph API: ${process.env.META_GRAPH_VERSION}`);
 console.log(`Meta OAuth redirect URI: ${redirectUri}`);
 console.log(`Login: ${process.env.ADMIN_USER} / ${process.env.ADMIN_PASSWORD}`);
 console.log('DEMO_MODE=false: bài đăng sẽ gọi Meta API thật khi tài khoản đã được kết nối.');

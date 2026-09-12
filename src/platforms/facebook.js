@@ -1,7 +1,7 @@
 export async function publishFacebook({ message, imageUrl, pageId, accessToken }) {
   const resolvedPageId = pageId || process.env.FACEBOOK_PAGE_ID;
   const token = accessToken || process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
-  const version = process.env.META_GRAPH_VERSION || 'v23.0';
+  const version = process.env.META_GRAPH_VERSION || 'v26.0';
 
   if (!resolvedPageId || !token) {
     throw new Error('Facebook chưa được kết nối hoặc thiếu Page Access Token');

@@ -1,5 +1,5 @@
 async function graphPost(path, params, accessToken) {
-  const version = process.env.META_GRAPH_VERSION || 'v23.0';
+  const version = process.env.META_GRAPH_VERSION || 'v26.0';
   const token = accessToken || process.env.INSTAGRAM_ACCESS_TOKEN;
   const endpoint = `https://graph.facebook.com/${version}/${path}`;
   const body = new URLSearchParams({ ...params, access_token: token || '' });

@@ -7,7 +7,7 @@ const savedFetch = global.fetch;
 try {
   process.env.META_APP_ID = 'app-123';
   process.env.META_APP_SECRET = 'secret-456';
-  process.env.META_GRAPH_VERSION = 'v23.0';
+  process.env.META_GRAPH_VERSION = 'v26.0';
   process.env.META_REDIRECT_URI = '';
   process.env.META_OAUTH_SCOPES = 'pages_show_list,pages_manage_posts';
 
@@ -17,6 +17,7 @@ try {
 
   const authUrl = new URL(buildMetaAuthUrl({ publicBase: 'https://example.test', state: 'state-xyz' }));
   assert.equal(authUrl.hostname, 'www.facebook.com');
+  assert.equal(authUrl.pathname, '/v26.0/dialog/oauth');
   assert.equal(authUrl.searchParams.get('client_id'), 'app-123');
   assert.equal(authUrl.searchParams.get('redirect_uri'), redirect);
   assert.equal(authUrl.searchParams.get('state'), 'state-xyz');
@@ -27,6 +28,7 @@ try {
     const url = new URL(String(input));
     if (url.pathname.endsWith('/oauth/access_token')) {
       tokenCall += 1;
+      assert.match(url.pathname, /^\/v26\.0\/oauth\/access_token$/);
       if (url.searchParams.get('grant_type') === 'fb_exchange_token') {
         return new Response(JSON.stringify({ access_token: 'long-token', expires_in: 5184000 }), {
           status: 200,
@@ -55,7 +57,7 @@ try {
     const url = new URL(String(input));
     pageCall += 1;
     if (pageCall === 1) {
-      assert.equal(url.pathname, '/v23.0/me/accounts');
+      assert.equal(url.pathname, '/v26.0/me/accounts');
       assert.equal(url.searchParams.get('access_token'), 'user-token');
       assert.match(url.searchParams.get('fields') || '', /instagram_business_account/);
       return new Response(JSON.stringify({
@@ -71,7 +73,7 @@ try {
             profile_picture_url: 'https://example.test/ig.jpg'
           }
         }],
-        paging: { next: 'https://graph.facebook.com/v23.0/next-page' }
+        paging: { next: 'https://graph.facebook.com/v26.0/next-page' }
       }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
     if (pageCall === 2) {
@@ -97,7 +99,7 @@ try {
   await assert.rejects(() => listMetaPages('bad-token'), /Invalid OAuth token/);
 
   console.log('META OAUTH TEST PASS');
-  console.log('Checked: OAuth URL/state/scopes, code exchange, long-lived token exchange, page discovery, Instagram discovery, pagination and Meta errors.');
+  console.log('Checked: Graph API v26.0, OAuth URL/state/scopes, code exchange, long-lived token exchange, page discovery, Instagram discovery, pagination and Meta errors.');
 } finally {
   global.fetch = savedFetch;
   for (const key of Object.keys(process.env)) {
