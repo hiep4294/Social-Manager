@@ -35,8 +35,9 @@ const normalized = normalizeGroupMonitor({
   max_replies_per_hour: 99
 });
 assert.equal(normalized.ok, true);
-assert.equal(normalized.value.pollSeconds, 60);
+assert.equal(normalized.value.pollSeconds, 300);
 assert.equal(normalized.value.maxRepliesPerHour, 20);
+assert.equal(normalizeGroupMonitor({ group_name: 'x', mode: 'DRAFT' }).value.pollSeconds, 600);
 assert.equal(normalizeGroupMonitor({ group_name: 'x', mode: 'AUTO', keywords: [] }).ok, false);
 
 const monitor = configureGroupMonitor(db, {
@@ -49,6 +50,7 @@ const monitor = configureGroupMonitor(db, {
   max_replies_per_hour: 2
 });
 assert.equal(monitor.mode, 'AUTO');
+assert.equal(monitor.poll_seconds, 300);
 assert.equal(groupMonitorMatches(monitor, 'Mình cần hỏi MOTOR cửa cuốn'), true);
 assert.equal(groupMonitorMatches(monitor, 'Bán bàn ghế'), false);
 assert.match(renderGroupReply(monitor, 'Motor FJJ335 bị nhảy aptomat'), /Motor FJJ335/);
