@@ -1,8 +1,8 @@
 {
   "name": "social-manager",
-  "version": "1.2.2",
+  "version": "1.3.0",
   "private": true,
-  "description": "Social Manager V1.2.2 with direct ChatGPT MCP control and Meta Graph API v26.0",
+  "description": "Social Manager V1.3 with Facebook OAuth, direct chat bridge, scheduling, image URL posts and idempotency",
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
@@ -12,8 +12,9 @@
     "test:facebook": "node tests/facebook.test.mjs",
     "test:meta": "node tests/meta-oauth.test.mjs",
     "test:mcp": "node tests/mcp.test.mjs",
+    "test:bridge": "node tests/github-bridge.test.mjs",
     "test:smoke": "node scripts/smoke-test.mjs",
-    "test": "npm run test:facebook && npm run test:meta && npm run test:mcp && npm run test:smoke"
+    "test": "npm run test:facebook && npm run test:meta && npm run test:mcp && npm run test:bridge && npm run test:smoke"
   },
   "dependencies": {
     "@modelcontextprotocol/node": "^2.0.0",
