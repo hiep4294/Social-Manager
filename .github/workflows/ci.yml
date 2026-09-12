@@ -30,10 +30,13 @@ jobs:
       - run: node --check src/github-bridge.js
       - run: node --check src/social-image.js
       - run: node --check src/runtime-auto-update.js
+      - run: node --check src/windows-agent-autostart.js
       - run: node --check scripts/start-demo.mjs
       - run: node --check scripts/start-codespace.mjs
       - run: node --check scripts/start-facebook-operator-agent.mjs
       - run: node --check scripts/facebook-operator-agent-runtime.mjs
+      - run: node --check scripts/restart-facebook-operator-agent.mjs
+      - run: node --check scripts/manage-facebook-operator-autostart.mjs
       - run: node --check scripts/operator-login.mjs
       - run: node --check scripts/smoke-test.mjs
       - run: node --check tests/facebook.test.mjs
