@@ -44,6 +44,28 @@ assert.equal(imageScheduled.value.imageMode, null);
 assert.equal(imageScheduled.value.scheduledAt, '2026-09-12T12:00:00.000Z');
 assert.equal(imageScheduled.value.idempotencyKey, 'cmd-2');
 
+const pageComment = normalizeBridgeCommand({
+  id: 'cmd-comment',
+  action: 'reply_facebook_comment',
+  brand_id: 1,
+  comment_id: 'comment-123',
+  message: 'Cảm ơn anh/chị.'
+});
+assert.equal(pageComment.ok, true);
+assert.equal(pageComment.value.targetId, 'comment-123');
+assert.equal(pageComment.value.message, 'Cảm ơn anh/chị.');
+
+const operator = normalizeBridgeCommand({
+  id: 'cmd-operator',
+  action: 'facebook_operator',
+  brand_id: 1,
+  operator_action: 'create_group',
+  payload: { name: 'Hội kỹ thuật cửa cuốn', privacy: 'PUBLIC' }
+});
+assert.equal(operator.ok, true);
+assert.equal(operator.value.operatorAction, 'create_group');
+assert.equal(operator.value.payload.name, 'Hội kỹ thuật cửa cuốn');
+
 const imageOnly = normalizeBridgeCommand({
   id: 'cmd-3',
   action: 'post_facebook',
@@ -58,10 +80,12 @@ assert.equal(normalizeBridgeCommand({ id: 'x', action: 'post_facebook', image_ur
 assert.equal(normalizeBridgeCommand({ id: 'x', action: 'post_facebook', message: 'x', image_mode: 'random' }).ok, false);
 assert.equal(normalizeBridgeCommand({ id: 'x', action: 'post_facebook', message: 'x', image_tone: 'random' }).ok, false);
 assert.equal(normalizeBridgeCommand({ id: 'x', action: 'post_facebook', message: 'x', scheduled_at: 'not-a-date' }).ok, false);
+assert.equal(normalizeBridgeCommand({ id: 'x', action: 'reply_facebook_comment', message: 'x' }).ok, false);
+assert.equal(normalizeBridgeCommand({ id: 'x', action: 'facebook_operator', operator_action: 'delete_group', payload: {} }).ok, false);
 
 assert.equal(isBridgeCommandDue(null, Date.parse('2026-09-12T12:00:00Z')), true);
 assert.equal(isBridgeCommandDue('2026-09-12T11:59:59Z', Date.parse('2026-09-12T12:00:00Z')), true);
 assert.equal(isBridgeCommandDue('2026-09-12T12:00:01Z', Date.parse('2026-09-12T12:00:00Z')), false);
 
 console.log('GITHUB BRIDGE TEST PASS');
-console.log('Checked: Facebook command validation, generated image mode, image URL, schedule normalization, idempotency key and due-time logic.');
+console.log('Checked: Page posts, Page comments, browser operator forwarding, image mode, scheduling and idempotency.');
