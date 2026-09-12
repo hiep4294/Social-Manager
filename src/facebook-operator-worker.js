@@ -270,7 +270,7 @@ function canonicalGroupPostUrl(raw, base = 'https://www.facebook.com') {
 }
 
 async function firstGroupPostArticle(page) {
-  const articles = page.locator('div[role="article"]');
+  const articles = page.locator('[role="article"]');
   const count = Math.min(40, await articles.count().catch(() => 0));
   let best = null;
   let bestDepth = Number.POSITIVE_INFINITY;
@@ -291,7 +291,7 @@ async function firstGroupPostArticle(page) {
     }
     if (!postUrl) continue;
 
-    const depth = await article.locator('xpath=ancestor::div[@role="article"]').count().catch(() => 99);
+    const depth = await article.locator('xpath=ancestor::*[@role="article"]').count().catch(() => 99);
     if (depth < bestDepth) {
       best = { article, text, postUrl };
       bestDepth = depth;
@@ -304,7 +304,13 @@ async function firstGroupPostArticle(page) {
 async function articleOwnsElement(article, element) {
   const owner = await article.elementHandle().catch(() => null);
   if (!owner) return false;
-  return element.evaluate((node, articleNode) => node.closest('div[role="article"]') === articleNode, owner).catch(() => false);
+  return element.evaluate((node, articleNode) => node.closest('[role="article"]') === articleNode, owner).catch(() => false);
+}
+
+async function nearestParentArticleIs(article, parentArticle) {
+  const parent = await parentArticle.elementHandle().catch(() => null);
+  if (!parent) return false;
+  return article.evaluate((node, parentNode) => node.parentElement?.closest('[role="article"]') === parentNode, parent).catch(() => false);
 }
 
 function classifyLikeLabel(label, pressed) {
@@ -397,7 +403,7 @@ async function executeLikeGroupComments(page, payload, db) {
   const { target, post } = await openLikeTarget(page, payload, db);
   await expandVisibleComments(post.article, requested);
 
-  const comments = post.article.locator('div[role="article"]');
+  const comments = post.article.locator('[role="article"]');
   const visibleCount = Math.min(120, await comments.count().catch(() => 0));
   let liked = 0;
   let alreadyLiked = 0;
@@ -407,6 +413,7 @@ async function executeLikeGroupComments(page, payload, db) {
   for (let i = 0; i < visibleCount && liked < requested; i += 1) {
     const comment = comments.nth(i);
     if (!(await comment.isVisible().catch(() => false))) continue;
+    if (!(await nearestParentArticleIs(comment, post.article))) continue;
     const text = String(await comment.innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
     if (!text) continue;
     examined += 1;
@@ -597,8 +604,7 @@ if (!enabled) {
   let lastActionAt = 0;
 
   function writeStatus(payload) {
-    const queued = db.prepare("SELECT COUNT(*) AS n FROM github_bridge_commands WHERE status='QUEUED'").get?.()?.n;
-    const operatorQueued = db.prepare("SELECT COUNT(*) AS n FROM facebook_operator_jobs WHERE status='QUEUED'").get()?.n || 0;
+    const queued = db.prepare("SELECT COUNT(*) AS n FROM facebook_operator_jobs WHERE status='QUEUED'").get()?.n || 0;
     const waiting = db.prepare("SELECT COUNT(*) AS n FROM facebook_operator_jobs WHERE status IN ('WAITING_USER','NEEDS_REVIEW')").get()?.n || 0;
     const activeMonitors = db.prepare('SELECT COUNT(*) AS n FROM facebook_group_monitors WHERE active=1').get()?.n || 0;
     const monitorReview = db.prepare("SELECT COUNT(*) AS n FROM facebook_group_monitor_seen WHERE status='NEEDS_REVIEW'").get()?.n || 0;
@@ -608,7 +614,7 @@ if (!enabled) {
         browser_path: browserPath,
         headless,
         profile_dir: profileDir,
-        queue: { queued: Number.isFinite(queued) ? queued : operatorQueued, waiting },
+        queue: { queued, waiting },
         group_monitor: { active: activeMonitors, needs_review: monitorReview },
         ...payload,
         updated_at: nowIso()
