@@ -10,6 +10,8 @@ assert.equal(normalizeOperatorJob({ action: 'join_group', payload: { group_url: 
 assert.equal(normalizeOperatorJob({ action: 'join_group', payload: { group_url: 'file:///tmp/x' } }).ok, false);
 assert.equal(normalizeOperatorJob({ action: 'post_group', payload: { group_url: 'https://facebook.com/groups/123', message: 'Xin chào' } }).ok, true);
 assert.equal(normalizeOperatorJob({ action: 'comment_group', payload: { post_url: 'https://facebook.com/groups/123/posts/456', message: 'Cảm ơn' } }).ok, true);
+assert.equal(normalizeOperatorJob({ action: 'like_first_group_post', payload: { group_url: 'https://facebook.com/groups/123' } }).ok, true);
+assert.equal(normalizeOperatorJob({ action: 'like_first_group_post', payload: {} }).ok, false);
 assert.equal(normalizeOperatorJob({ action: 'delete_group', payload: {} }).ok, false);
 
 const db = new Database(':memory:');
