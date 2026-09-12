@@ -33,6 +33,7 @@ jobs:
       - run: node --check scripts/start-demo.mjs
       - run: node --check scripts/start-codespace.mjs
       - run: node --check scripts/start-facebook-operator-agent.mjs
+      - run: node --check scripts/facebook-operator-agent-runtime.mjs
       - run: node --check scripts/operator-login.mjs
       - run: node --check scripts/smoke-test.mjs
       - run: node --check tests/facebook.test.mjs
