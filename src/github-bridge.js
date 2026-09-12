@@ -6,6 +6,57 @@ import Database from 'better-sqlite3';
 import { decryptSecret } from './security.js';
 import { publishFacebook } from './platforms/facebook.js';
 
+export function normalizeBridgeCommand(command = {}) {
+  const id = String(command?.id || '').trim();
+  const action = String(command?.action || '').trim();
+  const message = String(command?.message || '');
+  const brandId = Number(command?.brand_id || 0) || null;
+  const imageRaw = String(command?.image_url || '').trim();
+  const scheduledRaw = String(command?.scheduled_at || '').trim();
+  const idempotencyKey = String(command?.idempotency_key || id).trim();
+
+  if (!id) return { ok: false, error: 'Thiếu command id' };
+  if (action !== 'post_facebook') return { ok: false, error: `Action không hỗ trợ: ${action || '(trống)'}` };
+  if (!message.trim() && !imageRaw) return { ok: false, error: 'Lệnh Facebook phải có message hoặc image_url' };
+
+  let imageUrl = null;
+  if (imageRaw) {
+    try {
+      const parsed = new URL(imageRaw);
+      if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('protocol');
+      imageUrl = parsed.toString();
+    } catch {
+      return { ok: false, error: 'image_url phải là URL http/https hợp lệ' };
+    }
+  }
+
+  let scheduledAt = null;
+  if (scheduledRaw) {
+    const parsed = new Date(scheduledRaw);
+    if (Number.isNaN(parsed.getTime())) return { ok: false, error: 'scheduled_at không hợp lệ' };
+    scheduledAt = parsed.toISOString();
+  }
+
+  return {
+    ok: true,
+    value: {
+      id,
+      action,
+      brandId,
+      message,
+      imageUrl,
+      scheduledAt,
+      idempotencyKey: idempotencyKey || id
+    }
+  };
+}
+
+export function isBridgeCommandDue(scheduledAt, now = Date.now()) {
+  if (!scheduledAt) return true;
+  const when = new Date(scheduledAt).getTime();
+  return Number.isFinite(when) && when <= Number(now);
+}
+
 const enabled = String(process.env.GITHUB_BRIDGE_ENABLED || '').toLowerCase() === 'true';
 if (!enabled) {
   console.log('GitHub bridge: disabled');
@@ -37,15 +88,182 @@ if (!enabled) {
     );
   `);
 
+  function hasColumn(name) {
+    return db.prepare('PRAGMA table_info(github_bridge_commands)').all().some(row => row.name === name);
+  }
+
+  const migrations = [
+    ['image_url', 'TEXT'],
+    ['scheduled_at', 'TEXT'],
+    ['idempotency_key', 'TEXT'],
+    ['attempts', 'INTEGER NOT NULL DEFAULT 0']
+  ];
+  for (const [name, type] of migrations) {
+    if (!hasColumn(name)) db.exec(`ALTER TABLE github_bridge_commands ADD COLUMN ${name} ${type}`);
+  }
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_github_bridge_idempotency
+    ON github_bridge_commands(idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_github_bridge_due
+    ON github_bridge_commands(status, scheduled_at, created_at);
+  `);
+
   function nowIso() {
     return new Date().toISOString();
   }
 
   function writeStatus(payload) {
-    fs.writeFileSync(statusPath, JSON.stringify({ ...payload, updated_at: nowIso() }, null, 2), 'utf8');
+    const queued = db.prepare("SELECT COUNT(*) AS n FROM github_bridge_commands WHERE status='QUEUED'").get()?.n || 0;
+    const failed = db.prepare("SELECT COUNT(*) AS n FROM github_bridge_commands WHERE status='FAILED'").get()?.n || 0;
+    fs.writeFileSync(statusPath, JSON.stringify({
+      ...payload,
+      queue: { queued, failed },
+      updated_at: nowIso()
+    }, null, 2), 'utf8');
   }
 
   writeStatus({ bridge: 'ready', command_url: commandUrl, status: 'IDLE' });
+
+  function queueCommand(rawCommand) {
+    const normalized = normalizeBridgeCommand(rawCommand);
+    if (!normalized.ok) {
+      writeStatus({ bridge: 'ready', status: 'INVALID_COMMAND', error: normalized.error });
+      return null;
+    }
+
+    const command = normalized.value;
+    const existingById = db.prepare('SELECT * FROM github_bridge_commands WHERE id=?').get(command.id);
+    if (existingById) return existingById;
+
+    const existingByKey = db.prepare('SELECT * FROM github_bridge_commands WHERE idempotency_key=?').get(command.idempotencyKey);
+    if (existingByKey) {
+      writeStatus({
+        bridge: 'ready',
+        status: 'DUPLICATE_IGNORED',
+        id: command.id,
+        duplicate_of: existingByKey.id,
+        idempotency_key: command.idempotencyKey,
+        external_id: existingByKey.external_id || null
+      });
+      return existingByKey;
+    }
+
+    db.prepare(`
+      INSERT INTO github_bridge_commands(
+        id,action,brand_id,message,image_url,scheduled_at,idempotency_key,status,created_at,attempts
+      ) VALUES(?,?,?,?,?,?,?,?,?,0)
+    `).run(
+      command.id,
+      command.action,
+      command.brandId,
+      command.message,
+      command.imageUrl,
+      command.scheduledAt,
+      command.idempotencyKey,
+      'QUEUED',
+      nowIso()
+    );
+
+    writeStatus({
+      bridge: 'ready',
+      status: command.scheduledAt ? 'SCHEDULED' : 'QUEUED',
+      id: command.id,
+      brand_id: command.brandId,
+      has_image: Boolean(command.imageUrl),
+      scheduled_at: command.scheduledAt,
+      idempotency_key: command.idempotencyKey
+    });
+    console.log(`GitHub bridge: queued command=${command.id}${command.scheduledAt ? ` scheduled_at=${command.scheduledAt}` : ''}`);
+    return db.prepare('SELECT * FROM github_bridge_commands WHERE id=?').get(command.id);
+  }
+
+  async function processCommand(row) {
+    const lock = db.prepare(`
+      UPDATE github_bridge_commands
+      SET status='PROCESSING', attempts=COALESCE(attempts,0)+1
+      WHERE id=? AND status='QUEUED'
+    `).run(row.id);
+    if (!lock.changes) return;
+
+    writeStatus({
+      bridge: 'ready',
+      id: row.id,
+      action: row.action,
+      brand_id: row.brand_id,
+      has_image: Boolean(row.image_url),
+      scheduled_at: row.scheduled_at,
+      status: 'PROCESSING'
+    });
+
+    try {
+      const account = row.brand_id
+        ? db.prepare("SELECT * FROM social_accounts WHERE brand_id=? AND platform='facebook' ORDER BY id LIMIT 1").get(row.brand_id)
+        : db.prepare("SELECT * FROM social_accounts WHERE platform='facebook' ORDER BY id LIMIT 1").get();
+
+      if (!account) throw new Error('Không tìm thấy Facebook Page đã kết nối trong Social Manager');
+
+      const accessToken = decryptSecret(account.access_token_enc);
+      const result = await publishFacebook({
+        message: row.message,
+        imageUrl: row.image_url || undefined,
+        pageId: account.account_id,
+        accessToken
+      });
+      const externalId = result?.id || result?.post_id || null;
+
+      db.prepare(`
+        UPDATE github_bridge_commands
+        SET status='PUBLISHED', external_id=?, error=NULL, processed_at=?
+        WHERE id=?
+      `).run(externalId, nowIso(), row.id);
+
+      writeStatus({
+        bridge: 'ready',
+        id: row.id,
+        action: row.action,
+        brand_id: account.brand_id,
+        page_id: account.account_id,
+        page_name: account.account_name,
+        has_image: Boolean(row.image_url),
+        scheduled_at: row.scheduled_at,
+        status: 'PUBLISHED',
+        external_id: externalId
+      });
+      console.log(`GitHub bridge: Facebook published command=${row.id} post_id=${externalId || 'unknown'}`);
+    } catch (error) {
+      const errorText = String(error?.message || error);
+      db.prepare(`
+        UPDATE github_bridge_commands
+        SET status='FAILED', error=?, processed_at=?
+        WHERE id=?
+      `).run(errorText, nowIso(), row.id);
+      writeStatus({
+        bridge: 'ready',
+        id: row.id,
+        action: row.action,
+        brand_id: row.brand_id,
+        has_image: Boolean(row.image_url),
+        scheduled_at: row.scheduled_at,
+        status: 'FAILED',
+        error: errorText
+      });
+      console.error(`GitHub bridge: command=${row.id} failed: ${errorText}`);
+    }
+  }
+
+  async function processDueCommands() {
+    const now = nowIso();
+    const rows = db.prepare(`
+      SELECT * FROM github_bridge_commands
+      WHERE status='QUEUED'
+        AND (scheduled_at IS NULL OR scheduled_at <= ?)
+      ORDER BY COALESCE(scheduled_at, created_at) ASC, created_at ASC
+      LIMIT 10
+    `).all(now);
+
+    for (const row of rows) await processCommand(row);
+  }
 
   async function poll() {
     try {
@@ -54,63 +272,8 @@ if (!enabled) {
       const response = await fetch(url, { headers: { 'cache-control': 'no-cache' } });
       if (!response.ok) throw new Error(`Command HTTP ${response.status}`);
       const command = await response.json();
-
-      const id = String(command?.id || '').trim();
-      const action = String(command?.action || '').trim();
-      const message = String(command?.message || '');
-      const brandId = Number(command?.brand_id || 0) || null;
-
-      if (!id || action !== 'post_facebook' || !message.trim()) return;
-      if (db.prepare('SELECT 1 FROM github_bridge_commands WHERE id=?').get(id)) return;
-
-      db.prepare(`
-        INSERT INTO github_bridge_commands(id,action,brand_id,message,status,created_at)
-        VALUES(?,?,?,?,?,?)
-      `).run(id, action, brandId, message, 'PROCESSING', nowIso());
-      writeStatus({ id, action, brand_id: brandId, message, status: 'PROCESSING' });
-
-      try {
-        const account = brandId
-          ? db.prepare("SELECT * FROM social_accounts WHERE brand_id=? AND platform='facebook' ORDER BY id LIMIT 1").get(brandId)
-          : db.prepare("SELECT * FROM social_accounts WHERE platform='facebook' ORDER BY id LIMIT 1").get();
-
-        if (!account) throw new Error('Không tìm thấy Facebook Page đã kết nối trong Social Manager');
-
-        const accessToken = decryptSecret(account.access_token_enc);
-        const result = await publishFacebook({
-          message,
-          pageId: account.account_id,
-          accessToken
-        });
-        const externalId = result?.id || result?.post_id || null;
-
-        db.prepare(`
-          UPDATE github_bridge_commands
-          SET status='PUBLISHED', external_id=?, error=NULL, processed_at=?
-          WHERE id=?
-        `).run(externalId, nowIso(), id);
-
-        writeStatus({
-          id,
-          action,
-          brand_id: account.brand_id,
-          page_id: account.account_id,
-          page_name: account.account_name,
-          message,
-          status: 'PUBLISHED',
-          external_id: externalId
-        });
-        console.log(`GitHub bridge: Facebook published command=${id} post_id=${externalId || 'unknown'}`);
-      } catch (error) {
-        const errorText = String(error?.message || error);
-        db.prepare(`
-          UPDATE github_bridge_commands
-          SET status='FAILED', error=?, processed_at=?
-          WHERE id=?
-        `).run(errorText, nowIso(), id);
-        writeStatus({ id, action, brand_id: brandId, message, status: 'FAILED', error: errorText });
-        console.error(`GitHub bridge: command=${id} failed: ${errorText}`);
-      }
+      queueCommand(command);
+      await processDueCommands();
     } catch (error) {
       console.error(`GitHub bridge poll error: ${String(error?.message || error)}`);
     }
