@@ -17,14 +17,15 @@ if (!enabled) {
   db.pragma('journal_mode = WAL');
   ensureOperatorSchema(db);
 
-  const tickMs = Math.max(15_000, Number(process.env.GROUP_MONITOR_SCHEDULER_MS || 30_000));
+  const tickMs = Math.max(30_000, Number(process.env.GROUP_MONITOR_SCHEDULER_MS || 60_000));
   let running = false;
 
   const nowIso = () => new Date().toISOString();
 
   function queueDueMonitor(monitor) {
     const now = Date.now();
-    const slot = Math.floor(now / Math.max(60_000, Number(monitor.poll_seconds || 180) * 1000));
+    const pollMs = Math.max(300_000, Number(monitor.poll_seconds || 600) * 1000);
+    const slot = Math.floor(now / pollMs);
     const jobId = `group-monitor-${monitor.id}-${slot}`;
     const job = enqueueOperatorJob(db, {
       id: jobId,
@@ -32,7 +33,7 @@ if (!enabled) {
       action: 'scan_group',
       payload: { monitor_id: monitor.id }
     });
-    const next = new Date(now + Math.max(60, Number(monitor.poll_seconds || 180)) * 1000).toISOString();
+    const next = new Date(now + pollMs).toISOString();
     db.prepare('UPDATE facebook_group_monitors SET next_scan_at=?,updated_at=? WHERE id=?')
       .run(next, nowIso(), monitor.id);
     return job;
