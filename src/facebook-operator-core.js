@@ -7,6 +7,7 @@ export const OPERATOR_ACTIONS = new Set([
   'join_group',
   'post_group',
   'comment_group',
+  'like_first_group_post',
   'remember_group',
   'monitor_group',
   'stop_monitor_group',
@@ -54,7 +55,7 @@ export function normalizeOperatorJob(input = {}) {
     if (!['PUBLIC', 'PRIVATE'].includes(payload.privacy)) return { ok: false, error: 'privacy chỉ nhận PUBLIC hoặc PRIVATE' };
   }
 
-  if (['join_group', 'post_group'].includes(action)) {
+  if (['join_group', 'post_group', 'like_first_group_post'].includes(action)) {
     payload.group_url = cleanFacebookUrl(payload.group_url);
     payload.group_name = String(payload.group_name || '').trim();
     if (!payload.group_url && !payload.group_name) return { ok: false, error: `${action} cần group_url hoặc group_name` };
