@@ -73,6 +73,11 @@ process.env.META_GRAPH_VERSION ||= 'v26.0';
 process.env.ADMIN_USER = nonEmpty('ADMIN_USER') || 'admin';
 process.env.GITHUB_BRIDGE_ENABLED ||= 'true';
 process.env.GITHUB_BRIDGE_COMMAND_URL ||= 'https://raw.githubusercontent.com/hiep4294/Social-Manager/main/bridge/facebook-command.json';
+process.env.PAGE_AUTO_REPLY_ENABLED ||= 'true';
+process.env.PAGE_AUTO_REPLY_MODE ||= 'safe';
+process.env.PAGE_AUTO_REPLY_POLL_MS ||= '60000';
+process.env.FB_OPERATOR_ENABLED ||= 'true';
+process.env.FB_OPERATOR_HEADLESS ||= 'true';
 process.env.AUTO_UPDATE_ENABLED ||= 'true';
 process.env.AUTO_UPDATE_MANIFEST_URL ||= 'https://raw.githubusercontent.com/hiep4294/Social-Manager/main/bridge/runtime-version.json';
 process.env.AUTO_UPDATE_CHECK_MS ||= '60000';
@@ -106,6 +111,8 @@ console.log(`Login: ${process.env.ADMIN_USER} / ${process.env.ADMIN_PASSWORD}`);
 console.log('Runtime ADMIN_PASSWORD / SESSION_SECRET / TOKEN_ENCRYPTION_KEY được giữ ổn định trong .env cục bộ của Codespace.');
 console.log('DEMO_MODE=false: bài đăng sẽ gọi Meta API thật khi tài khoản đã được kết nối.');
 console.log('GitHub bridge: ON (nhận lệnh Facebook trực tiếp từ chat).');
+console.log('Page auto reply: ON / safe mode (LOW tự trả lời, MEDIUM/HIGH chờ xử lý).');
+console.log('Facebook operator: ON (tự dừng nếu thiếu browser, login, CAPTCHA, 2FA hoặc checkpoint).');
 console.log('Auto update: ON (tự kiểm tra phiên bản mới và tự khởi động lại).');
 
 if (!metaAppId || !metaAppSecret) {
@@ -119,4 +126,6 @@ if (!metaAppId || !metaAppSecret) {
 
 await import('../src/server.js');
 await import('../src/github-bridge.js');
+await import('../src/page-auto-reply-worker.js');
+await import('../src/facebook-operator-worker.js');
 await import('../src/runtime-auto-update.js');
