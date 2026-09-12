@@ -5,22 +5,89 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { decryptSecret } from './security.js';
 import { publishFacebook } from './platforms/facebook.js';
+import { commentOnFacebookObject } from './facebook-page-engagement.js';
+import { enqueueOperatorJob, normalizeOperatorJob } from './facebook-operator-core.js';
 
 const IMAGE_TONES = new Set(['auto', 'promo', 'greeting', 'notice', 'launch', 'professional']);
+const PAGE_COMMENT_ACTIONS = new Set(['comment_facebook_page', 'reply_facebook_comment']);
+
+function normalizeSchedule(command) {
+  const raw = String(command?.scheduled_at || '').trim();
+  if (!raw) return { ok: true, value: null };
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return { ok: false, error: 'scheduled_at không hợp lệ' };
+  return { ok: true, value: parsed.toISOString() };
+}
 
 export function normalizeBridgeCommand(command = {}) {
   const id = String(command?.id || '').trim();
   const action = String(command?.action || '').trim();
-  const message = String(command?.message || '');
   const brandId = Number(command?.brand_id || 0) || null;
+  const idempotencyKey = String(command?.idempotency_key || id).trim();
+  const schedule = normalizeSchedule(command);
+
+  if (!id) return { ok: false, error: 'Thiếu command id' };
+  if (!schedule.ok) return schedule;
+
+  if (action === 'facebook_operator') {
+    const operatorAction = String(command?.operator_action || '').trim();
+    const payload = command?.payload && typeof command.payload === 'object' ? command.payload : {};
+    const operator = normalizeOperatorJob({
+      action: operatorAction,
+      brand_id: brandId,
+      payload,
+      scheduled_at: schedule.value
+    });
+    if (!operator.ok) return operator;
+    return {
+      ok: true,
+      value: {
+        id,
+        action,
+        brandId,
+        message: '',
+        targetId: null,
+        operatorAction,
+        payload,
+        imageUrl: null,
+        imageMode: null,
+        imageTone: 'auto',
+        scheduledAt: schedule.value,
+        idempotencyKey: idempotencyKey || id
+      }
+    };
+  }
+
+  if (PAGE_COMMENT_ACTIONS.has(action)) {
+    const message = String(command?.message || '').trim();
+    const targetId = String(command?.target_id || command?.comment_id || command?.object_id || '').trim();
+    if (!message) return { ok: false, error: 'Bình luận Facebook cần message' };
+    if (!targetId) return { ok: false, error: 'Bình luận Facebook cần target_id/comment_id/object_id' };
+    return {
+      ok: true,
+      value: {
+        id,
+        action,
+        brandId,
+        message,
+        targetId,
+        operatorAction: null,
+        payload: null,
+        imageUrl: null,
+        imageMode: null,
+        imageTone: 'auto',
+        scheduledAt: schedule.value,
+        idempotencyKey: idempotencyKey || id
+      }
+    };
+  }
+
+  if (action !== 'post_facebook') return { ok: false, error: `Action không hỗ trợ: ${action || '(trống)'}` };
+
+  const message = String(command?.message || '');
   const imageRaw = String(command?.image_url || '').trim();
   const imageModeRaw = String(command?.image_mode || '').trim().toLowerCase();
   const imageToneRaw = String(command?.image_tone || 'auto').trim().toLowerCase();
-  const scheduledRaw = String(command?.scheduled_at || '').trim();
-  const idempotencyKey = String(command?.idempotency_key || id).trim();
-
-  if (!id) return { ok: false, error: 'Thiếu command id' };
-  if (action !== 'post_facebook') return { ok: false, error: `Action không hỗ trợ: ${action || '(trống)'}` };
   if (!message.trim() && !imageRaw) return { ok: false, error: 'Lệnh Facebook phải có message hoặc image_url' };
 
   let imageUrl = null;
@@ -39,15 +106,7 @@ export function normalizeBridgeCommand(command = {}) {
     if (!['auto', 'none'].includes(imageModeRaw)) return { ok: false, error: 'image_mode chỉ nhận auto hoặc none' };
     imageMode = imageModeRaw;
   }
-
   if (!IMAGE_TONES.has(imageToneRaw)) return { ok: false, error: 'image_tone không hợp lệ' };
-
-  let scheduledAt = null;
-  if (scheduledRaw) {
-    const parsed = new Date(scheduledRaw);
-    if (Number.isNaN(parsed.getTime())) return { ok: false, error: 'scheduled_at không hợp lệ' };
-    scheduledAt = parsed.toISOString();
-  }
 
   return {
     ok: true,
@@ -56,10 +115,13 @@ export function normalizeBridgeCommand(command = {}) {
       action,
       brandId,
       message,
+      targetId: null,
+      operatorAction: null,
+      payload: null,
       imageUrl,
       imageMode,
       imageTone: imageToneRaw,
-      scheduledAt,
+      scheduledAt: schedule.value,
       idempotencyKey: idempotencyKey || id
     }
   };
@@ -111,6 +173,9 @@ if (!enabled) {
     ['image_mode', 'TEXT'],
     ['image_tone', "TEXT DEFAULT 'auto'"],
     ['generated_image_url', 'TEXT'],
+    ['target_id', 'TEXT'],
+    ['operator_action', 'TEXT'],
+    ['payload_json', 'TEXT'],
     ['scheduled_at', 'TEXT'],
     ['idempotency_key', 'TEXT'],
     ['attempts', 'INTEGER NOT NULL DEFAULT 0']
@@ -168,8 +233,9 @@ if (!enabled) {
 
     db.prepare(`
       INSERT INTO github_bridge_commands(
-        id,action,brand_id,message,image_url,image_mode,image_tone,scheduled_at,idempotency_key,status,created_at,attempts
-      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,0)
+        id,action,brand_id,message,image_url,image_mode,image_tone,target_id,operator_action,payload_json,
+        scheduled_at,idempotency_key,status,created_at,attempts
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)
     `).run(
       command.id,
       command.action,
@@ -178,6 +244,9 @@ if (!enabled) {
       command.imageUrl,
       command.imageMode,
       command.imageTone,
+      command.targetId,
+      command.operatorAction,
+      command.payload ? JSON.stringify(command.payload) : null,
       command.scheduledAt,
       command.idempotencyKey,
       'QUEUED',
@@ -188,24 +257,30 @@ if (!enabled) {
       bridge: 'ready',
       status: command.scheduledAt ? 'SCHEDULED' : 'QUEUED',
       id: command.id,
+      action: command.action,
       brand_id: command.brandId,
+      operator_action: command.operatorAction,
+      target_id: command.targetId,
       has_image: Boolean(command.imageUrl),
       image_mode: command.imageMode,
       image_tone: command.imageTone,
       scheduled_at: command.scheduledAt,
       idempotency_key: command.idempotencyKey
     });
-    console.log(`GitHub bridge: queued command=${command.id}${command.scheduledAt ? ` scheduled_at=${command.scheduledAt}` : ''}`);
+    console.log(`GitHub bridge: queued command=${command.id} action=${command.action}${command.scheduledAt ? ` scheduled_at=${command.scheduledAt}` : ''}`);
     return db.prepare('SELECT * FROM github_bridge_commands WHERE id=?').get(command.id);
+  }
+
+  function pageAccount(brandId) {
+    return brandId
+      ? db.prepare("SELECT * FROM social_accounts WHERE brand_id=? AND platform='facebook' ORDER BY id LIMIT 1").get(brandId)
+      : db.prepare("SELECT * FROM social_accounts WHERE platform='facebook' ORDER BY id LIMIT 1").get();
   }
 
   async function resolveImage(row, account) {
     if (row.image_url) return { url: row.image_url, generated: false, tone: null };
     if (row.image_mode !== 'auto') return { url: null, generated: false, tone: null };
-
-    const brand = row.brand_id
-      ? db.prepare('SELECT * FROM brands WHERE id=?').get(row.brand_id)
-      : null;
+    const brand = row.brand_id ? db.prepare('SELECT * FROM brands WHERE id=?').get(row.brand_id) : null;
     const { createSocialImage } = await import('./social-image.js');
     const generated = await createSocialImage({
       message: row.message,
@@ -216,6 +291,15 @@ if (!enabled) {
     });
     db.prepare('UPDATE github_bridge_commands SET generated_image_url=? WHERE id=?').run(generated.url, row.id);
     return { url: generated.url, generated: true, tone: generated.tone };
+  }
+
+  function markDone(row, status, externalId, extra = {}) {
+    db.prepare(`
+      UPDATE github_bridge_commands
+      SET status=?, external_id=?, error=NULL, processed_at=?
+      WHERE id=?
+    `).run(status, externalId || null, nowIso(), row.id);
+    writeStatus({ bridge: 'ready', id: row.id, action: row.action, status, external_id: externalId || null, ...extra });
   }
 
   async function processCommand(row) {
@@ -231,6 +315,8 @@ if (!enabled) {
       id: row.id,
       action: row.action,
       brand_id: row.brand_id,
+      operator_action: row.operator_action || null,
+      target_id: row.target_id || null,
       has_image: Boolean(row.image_url),
       image_mode: row.image_mode || null,
       scheduled_at: row.scheduled_at,
@@ -238,14 +324,40 @@ if (!enabled) {
     });
 
     try {
-      const account = row.brand_id
-        ? db.prepare("SELECT * FROM social_accounts WHERE brand_id=? AND platform='facebook' ORDER BY id LIMIT 1").get(row.brand_id)
-        : db.prepare("SELECT * FROM social_accounts WHERE platform='facebook' ORDER BY id LIMIT 1").get();
+      if (row.action === 'facebook_operator') {
+        const job = enqueueOperatorJob(db, {
+          id: `${row.id}-operator`,
+          brand_id: row.brand_id,
+          action: row.operator_action,
+          payload: JSON.parse(row.payload_json || '{}')
+        });
+        markDone(row, 'FORWARDED', job.id, { operator_job_id: job.id, operator_action: row.operator_action });
+        console.log(`GitHub bridge: forwarded command=${row.id} operator_job=${job.id}`);
+        return;
+      }
 
+      const account = pageAccount(row.brand_id);
       if (!account) throw new Error('Không tìm thấy Facebook Page đã kết nối trong Social Manager');
+      const accessToken = decryptSecret(account.access_token_enc);
+
+      if (PAGE_COMMENT_ACTIONS.has(row.action)) {
+        const result = await commentOnFacebookObject({
+          objectId: row.target_id,
+          message: row.message,
+          accessToken
+        });
+        const externalId = result?.id || null;
+        markDone(row, 'PUBLISHED', externalId, {
+          brand_id: account.brand_id,
+          page_id: account.account_id,
+          page_name: account.account_name,
+          target_id: row.target_id
+        });
+        console.log(`GitHub bridge: Facebook comment published command=${row.id} comment_id=${externalId || 'unknown'}`);
+        return;
+      }
 
       const image = await resolveImage(row, account);
-      const accessToken = decryptSecret(account.access_token_enc);
       const result = await publishFacebook({
         message: row.message,
         imageUrl: image.url || undefined,
@@ -253,17 +365,7 @@ if (!enabled) {
         accessToken
       });
       const externalId = result?.id || result?.post_id || null;
-
-      db.prepare(`
-        UPDATE github_bridge_commands
-        SET status='PUBLISHED', external_id=?, error=NULL, processed_at=?
-        WHERE id=?
-      `).run(externalId, nowIso(), row.id);
-
-      writeStatus({
-        bridge: 'ready',
-        id: row.id,
-        action: row.action,
+      markDone(row, 'PUBLISHED', externalId, {
         brand_id: account.brand_id,
         page_id: account.account_id,
         page_name: account.account_name,
@@ -271,9 +373,7 @@ if (!enabled) {
         generated_image: image.generated,
         image_tone: image.tone,
         image_url: image.url,
-        scheduled_at: row.scheduled_at,
-        status: 'PUBLISHED',
-        external_id: externalId
+        scheduled_at: row.scheduled_at
       });
       console.log(`GitHub bridge: Facebook published command=${row.id} post_id=${externalId || 'unknown'}${image.generated ? ` generated_image=${image.url}` : ''}`);
     } catch (error) {
@@ -288,9 +388,8 @@ if (!enabled) {
         id: row.id,
         action: row.action,
         brand_id: row.brand_id,
-        has_image: Boolean(row.image_url),
-        image_mode: row.image_mode || null,
-        scheduled_at: row.scheduled_at,
+        operator_action: row.operator_action || null,
+        target_id: row.target_id || null,
         status: 'FAILED',
         error: errorText
       });
@@ -307,7 +406,6 @@ if (!enabled) {
       ORDER BY COALESCE(scheduled_at, created_at) ASC, created_at ASC
       LIMIT 10
     `).all(now);
-
     for (const row of rows) await processCommand(row);
   }
 
