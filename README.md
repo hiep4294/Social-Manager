@@ -1,6 +1,26 @@
 # Social Manager V1.2.1
 
+[▶ Mở Social Manager bằng GitHub Codespaces](https://codespaces.new/hiep4294/Social-Manager?quickstart=1)
+
+[🔐 Cấu hình Codespaces Secrets](https://github.com/hiep4294/Social-Manager/settings/secrets/codespaces)
+
 Web app quản lý và đăng nội dung marketing cho quán ăn, quán cà phê, cửa hàng và showroom.
+
+## Bắt đầu nhanh để test Facebook thật
+
+1. Bấm **Mở Social Manager bằng GitHub Codespaces** ở đầu trang.
+2. Trước khi chạy live, vào **Cấu hình Codespaces Secrets** và tạo `META_APP_ID`, `META_APP_SECRET`.
+3. Trong Terminal Codespace chạy:
+
+```bash
+npm run codespace
+```
+
+4. Copy dòng `Meta OAuth redirect URI` mà terminal in ra và khai báo trong Meta App.
+5. Mở Social Manager -> **Kết nối MXH** -> kết nối Facebook -> chọn Page.
+6. Tạo bài `xin chào`, chọn Facebook và để trống thời gian để đăng ngay.
+
+> Không gửi `META_APP_SECRET` vào chat và không commit secret vào repository.
 
 ## Chức năng hiện tại
 
@@ -76,6 +96,8 @@ Trong GitHub:
 ```text
 Code -> Codespaces -> Create codespace on main
 ```
+
+Hoặc dùng link một chạm ở đầu README.
 
 Port `3000` được cấu hình public để callback OAuth có URL HTTPS.
 
