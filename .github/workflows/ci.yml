@@ -24,6 +24,8 @@ jobs:
       - run: node --check src/facebook-operator-core.js
       - run: node --check src/facebook-operator-worker.js
       - run: node --check src/operator-command-poller.js
+      - run: node --check src/group-monitor-core.js
+      - run: node --check src/group-monitor-scheduler.js
       - run: node --check src/mcp-server.js
       - run: node --check src/github-bridge.js
       - run: node --check src/social-image.js
@@ -36,6 +38,7 @@ jobs:
       - run: node --check tests/facebook.test.mjs
       - run: node --check tests/facebook-engagement.test.mjs
       - run: node --check tests/facebook-operator-core.test.mjs
+      - run: node --check tests/group-monitor-core.test.mjs
       - run: node --check tests/meta-oauth.test.mjs
       - run: node --check tests/mcp.test.mjs
       - run: node --check tests/github-bridge.test.mjs
@@ -49,6 +52,8 @@ jobs:
         run: npm run test:engagement
       - name: Facebook operator core test
         run: npm run test:operator
+      - name: Group Monitor core test
+        run: npm run test:group-monitor
       - name: Meta OAuth integration test
         run: npm run test:meta
       - name: ChatGPT MCP integration test
