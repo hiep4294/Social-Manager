@@ -13,10 +13,9 @@ export function metaRedirectUri(publicBase) {
 }
 
 export function metaScopes() {
-  // Facebook Page first. Instagram permissions are intentionally excluded here
-  // because Meta no longer accepts instagram_basic / instagram_content_publish
-  // in this Facebook Login flow for the current app configuration.
-  return (process.env.META_OAUTH_SCOPES || 'pages_show_list,pages_read_engagement,pages_manage_posts')
+  // Facebook Page first. Instagram permissions are intentionally excluded here.
+  // Page engagement permissions support reading user comments and replying as Page.
+  return (process.env.META_OAUTH_SCOPES || 'pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_engagement,pages_read_user_content')
     .split(',')
     .map(x => x.trim())
     .filter(Boolean);
@@ -81,8 +80,6 @@ export async function exchangeMetaCode({ code, publicBase }) {
 
 export async function listMetaPages(userAccessToken) {
   const first = new URL(`https://graph.facebook.com/${version()}/me/accounts`);
-  // Keep Page discovery Facebook-only for the first live test. Instagram will be
-  // connected through its own supported login/API flow in a later step.
   first.searchParams.set('fields', 'id,name,category,access_token');
   first.searchParams.set('limit', '100');
   first.searchParams.set('access_token', userAccessToken);
