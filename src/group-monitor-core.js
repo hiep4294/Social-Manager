@@ -45,7 +45,7 @@ export function ensureGroupMonitorSchema(db) {
       watch_all INTEGER NOT NULL DEFAULT 0,
       mode TEXT NOT NULL DEFAULT 'DRAFT',
       reply_template TEXT NOT NULL DEFAULT '',
-      poll_seconds INTEGER NOT NULL DEFAULT 180,
+      poll_seconds INTEGER NOT NULL DEFAULT 600,
       max_replies_per_hour INTEGER NOT NULL DEFAULT 3,
       active INTEGER NOT NULL DEFAULT 1,
       last_scan_at TEXT,
@@ -74,6 +74,10 @@ export function ensureGroupMonitorSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_fb_group_seen_monitor
       ON facebook_group_monitor_seen(monitor_id, discovered_at);
   `);
+
+  // Existing V1.6 monitors could be configured below the new safe floor.
+  // Move them to five minutes instead of repeatedly hitting Facebook.
+  db.prepare('UPDATE facebook_group_monitors SET poll_seconds=300 WHERE poll_seconds<300').run();
 }
 
 export function rememberFacebookAsset(db, { assetType, name, url, brandId = null, metadata = {} }) {
@@ -131,7 +135,8 @@ export function normalizeGroupMonitor(input = {}) {
   const watchAll = input.watch_all === true || String(input.watch_all || '').toLowerCase() === 'true';
   const mode = String(input.mode || 'DRAFT').trim().toUpperCase();
   const replyTemplate = String(input.reply_message || input.reply_template || '').trim();
-  const pollSeconds = Math.max(60, Math.min(3600, Number(input.poll_seconds || 180) || 180));
+  // Default 10 minutes; five minutes is the minimum to keep Group automation conservative.
+  const pollSeconds = Math.max(300, Math.min(3600, Number(input.poll_seconds || 600) || 600));
   const maxRepliesPerHour = Math.max(1, Math.min(20, Number(input.max_replies_per_hour || 3) || 3));
 
   if (!groupName && !groupUrl) return { ok: false, error: 'Theo dõi Group cần group_name hoặc group_url' };
