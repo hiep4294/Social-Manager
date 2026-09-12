@@ -85,12 +85,29 @@ function processingJobs() {
   }
 }
 
-function dependenciesChanged(oldHead, newHead) {
-  const changed = git([
-    'diff', '--name-only', oldHead, newHead, '--',
-    'package.json', 'package-lock.json', 'npm-shrinkwrap.json'
-  ]).stdout;
-  return Boolean(changed.trim());
+function changedFiles(oldHead, newHead) {
+  return git(['diff', '--name-only', oldHead, newHead]).stdout
+    .split(/\r?\n/)
+    .map(x => x.trim())
+    .filter(Boolean);
+}
+
+function agentRuntimeChanged(files) {
+  return files.some(file =>
+    file.startsWith('src/') ||
+    file.startsWith('scripts/') ||
+    file === 'package.json' ||
+    file === 'package-lock.json' ||
+    file === 'npm-shrinkwrap.json'
+  );
+}
+
+function dependenciesChanged(files) {
+  return files.some(file =>
+    file === 'package.json' ||
+    file === 'package-lock.json' ||
+    file === 'npm-shrinkwrap.json'
+  );
 }
 
 function installDependencies() {
@@ -132,15 +149,16 @@ async function stopChild() {
   if (!proc) return;
   await new Promise(resolve => {
     let finished = false;
+    let timer = null;
     const done = () => {
       if (finished) return;
       finished = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       resolve();
     };
     proc.once('exit', done);
     try { proc.kill('SIGTERM'); } catch { done(); return; }
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       try { proc.kill('SIGKILL'); } catch {}
       setTimeout(done, 500);
     }, 10_000);
@@ -192,6 +210,14 @@ async function checkForUpdate({ startup = false } = {}) {
       return false;
     }
 
+    const files = changedFiles(oldHead, remoteHead);
+    if (!agentRuntimeChanged(files)) {
+      // Command bridge, docs, UI or CI-only changes do not require restarting the Windows Agent.
+      git(['merge', '--ff-only', 'origin/main']);
+      lastSkipReason = '';
+      return false;
+    }
+
     const active = processingJobs();
     if (active > 0) {
       logSkipOnce(`đang có ${active} tác vụ Facebook PROCESSING; hoãn cập nhật đến lượt kiểm tra tiếp theo`);
@@ -199,8 +225,8 @@ async function checkForUpdate({ startup = false } = {}) {
     }
 
     lastSkipReason = '';
-    dependencyUpdate = dependenciesChanged(oldHead, remoteHead);
-    log(`phát hiện bản mới ${oldHead.slice(0, 7)} -> ${remoteHead.slice(0, 7)}${startup ? ' khi khởi động' : ''}`);
+    dependencyUpdate = dependenciesChanged(files);
+    log(`phát hiện bản Agent mới ${oldHead.slice(0, 7)} -> ${remoteHead.slice(0, 7)}${startup ? ' khi khởi động' : ''}`);
 
     if (child) {
       await stopChild();
