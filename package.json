@@ -1,22 +1,25 @@
 {
   "name": "social-manager",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
-  "description": "Social Manager V1.4 with Facebook OAuth, direct chat bridge, auto update, scheduling, idempotency and generated social images",
+  "description": "Social Manager V1.5 with Page auto reply, Facebook browser operator, direct chat bridge, auto update and generated social images",
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
     "mcp": "node src/mcp-server.js",
     "demo": "node scripts/start-demo.mjs",
     "codespace": "node scripts/start-codespace.mjs",
+    "operator": "node src/facebook-operator-worker.js",
     "test:facebook": "node tests/facebook.test.mjs",
+    "test:engagement": "node tests/facebook-engagement.test.mjs",
+    "test:operator": "node tests/facebook-operator-core.test.mjs",
     "test:meta": "node tests/meta-oauth.test.mjs",
     "test:mcp": "node tests/mcp.test.mjs",
     "test:bridge": "node tests/github-bridge.test.mjs",
     "test:image": "node tests/social-image.test.mjs",
     "test:auto": "node tests/runtime-auto-update.test.mjs",
     "test:smoke": "node scripts/smoke-test.mjs",
-    "test": "npm run test:facebook && npm run test:meta && npm run test:mcp && npm run test:bridge && npm run test:image && npm run test:auto && npm run test:smoke"
+    "test": "npm run test:facebook && npm run test:engagement && npm run test:operator && npm run test:meta && npm run test:mcp && npm run test:bridge && npm run test:image && npm run test:auto && npm run test:smoke"
   },
   "dependencies": {
     "@modelcontextprotocol/node": "^2.0.0",
@@ -27,6 +30,7 @@
     "express": "^4.21.2",
     "express-session": "^1.18.1",
     "multer": "^1.4.5-lts.1",
+    "playwright-core": "^1.55.0",
     "sharp": "^0.34.3",
     "zod": "^4.0.0"
   },
