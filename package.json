@@ -1,8 +1,8 @@
 {
   "name": "social-manager",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "private": true,
-  "description": "Social Manager V1.2 with direct ChatGPT MCP control",
+  "description": "Social Manager V1.2.2 with direct ChatGPT MCP control and Meta Graph API v26.0",
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
