@@ -1,19 +1,23 @@
 import 'dotenv/config';
 import fs from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
+import { installWindowsAgentAutostart } from '../src/windows-agent-autostart.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, '..');
 const runtimeScript = path.join(__dirname, 'facebook-operator-agent-runtime.mjs');
+const restartHelperScript = path.join(__dirname, 'restart-facebook-operator-agent.mjs');
 const logPath = path.join(root, 'data', 'operator-agent-update.log');
 const dbPath = process.env.SOCIAL_MANAGER_DB || path.join(root, 'data', 'social-manager.db');
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 const autoUpdateEnabled = String(process.env.FB_AGENT_AUTO_UPDATE ?? 'true').toLowerCase() !== 'false';
+const autoStartEnabled = String(process.env.FB_AGENT_AUTOSTART ?? 'true').toLowerCase() !== 'false';
 const updateCheckMs = Math.max(30_000, Number(process.env.FB_AGENT_AUTO_UPDATE_MS || 60_000));
 const expectedRepository = String(process.env.FB_AGENT_UPDATE_REPOSITORY || 'hiep4294/Social-Manager').trim().toLowerCase();
 
@@ -24,11 +28,33 @@ let updating = false;
 let shuttingDown = false;
 let restartTimer = null;
 let lastSkipReason = '';
+let instanceServer = null;
 
 function log(message) {
   const line = `[${new Date().toISOString()}] ${message}`;
   console.log(`Agent supervisor: ${message}`);
   try { fs.appendFileSync(logPath, `${line}\n`, 'utf8'); } catch {}
+}
+
+async function acquireSingleInstance() {
+  if (process.platform !== 'win32') return true;
+  const pipeName = '\\\\.\\pipe\\SocialManagerFacebookOperatorAgent-hiep4294';
+  const server = net.createServer(socket => socket.end());
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(pipeName, () => {
+      server.removeListener('error', reject);
+      resolve();
+    });
+  }).catch(error => {
+    if (String(error?.code || '') === 'EADDRINUSE') {
+      console.log('Agent supervisor: một Agent khác đang chạy; phiên này dừng để tránh xử lý trùng lệnh.');
+      process.exit(0);
+    }
+    throw error;
+  });
+  instanceServer = server;
+  return true;
 }
 
 function run(command, args, { allowFailure = false } = {}) {
@@ -102,6 +128,14 @@ function agentRuntimeChanged(files) {
   );
 }
 
+function supervisorChanged(files) {
+  return files.some(file => [
+    'scripts/start-facebook-operator-agent.mjs',
+    'scripts/restart-facebook-operator-agent.mjs',
+    'src/windows-agent-autostart.js'
+  ].includes(file));
+}
+
 function dependenciesChanged(files) {
   return files.some(file =>
     file === 'package.json' ||
@@ -172,12 +206,27 @@ function logSkipOnce(reason) {
   log(reason);
 }
 
+function spawnSupervisorRestartHelper() {
+  const restartLog = path.join(root, 'data', 'operator-agent-restart.log');
+  const fd = fs.openSync(restartLog, 'a');
+  const helper = spawn(process.execPath, [restartHelperScript, String(process.pid)], {
+    cwd: root,
+    env: process.env,
+    detached: true,
+    stdio: ['ignore', fd, fd],
+    windowsHide: true
+  });
+  helper.unref();
+  try { fs.closeSync(fd); } catch {}
+}
+
 async function checkForUpdate({ startup = false } = {}) {
   if (!autoUpdateEnabled || updating || shuttingDown) return false;
   updating = true;
   let childWasStopped = false;
   let oldHead = null;
   let dependencyUpdate = false;
+  let fullSupervisorRestart = false;
 
   try {
     const trusted = remoteIsTrusted();
@@ -212,7 +261,6 @@ async function checkForUpdate({ startup = false } = {}) {
 
     const files = changedFiles(oldHead, remoteHead);
     if (!agentRuntimeChanged(files)) {
-      // Command bridge, docs, UI or CI-only changes do not require restarting the Windows Agent.
       git(['merge', '--ff-only', 'origin/main']);
       lastSkipReason = '';
       return false;
@@ -226,6 +274,7 @@ async function checkForUpdate({ startup = false } = {}) {
 
     lastSkipReason = '';
     dependencyUpdate = dependenciesChanged(files);
+    fullSupervisorRestart = supervisorChanged(files);
     log(`phát hiện bản Agent mới ${oldHead.slice(0, 7)} -> ${remoteHead.slice(0, 7)}${startup ? ' khi khởi động' : ''}`);
 
     if (child) {
@@ -241,7 +290,16 @@ async function checkForUpdate({ startup = false } = {}) {
 
     log('đang tự kiểm thử bản cập nhật bằng npm test');
     run(npmCommand, ['test']);
-    log(`cập nhật thành công lên ${remoteHead.slice(0, 7)}; tự khởi động lại Agent`);
+    log(`cập nhật thành công lên ${remoteHead.slice(0, 7)}`);
+
+    if (fullSupervisorRestart) {
+      log('thành phần Supervisor thay đổi; thực hiện full restart để nạp code mới');
+      spawnSupervisorRestartHelper();
+      shuttingDown = true;
+      setTimeout(() => process.exit(0), 350);
+    } else {
+      log('tự khởi động lại Agent runtime');
+    }
     return true;
   } catch (error) {
     const message = String(error?.message || error);
@@ -269,18 +327,31 @@ async function shutdown(signal) {
   if (restartTimer) clearTimeout(restartTimer);
   log(`shutdown ${signal}`);
   await stopChild().catch(() => {});
+  try { instanceServer?.close(); } catch {}
   process.exit(0);
 }
 
 process.once('SIGINT', () => { shutdown('SIGINT').catch(() => process.exit(0)); });
 process.once('SIGTERM', () => { shutdown('SIGTERM').catch(() => process.exit(0)); });
 
+await acquireSingleInstance();
+
 console.log('Social Manager Facebook Operator Agent Supervisor');
 console.log(`Auto update: ${autoUpdateEnabled ? 'ON' : 'OFF'} | origin/main | mỗi ${Math.round(updateCheckMs / 1000)} giây`);
+console.log(`Windows auto-start: ${process.platform === 'win32' && autoStartEnabled ? 'ON' : 'OFF'}`);
 console.log('Update policy: trusted repo + clean source + không cắt ngang job + fast-forward only + npm test + rollback nếu lỗi.');
 
+if (process.platform === 'win32' && autoStartEnabled) {
+  try {
+    const result = installWindowsAgentAutostart({ root, nodePath: process.execPath });
+    log(`Windows auto-start đã sẵn sàng; log nền: ${result.log_path}`);
+  } catch (error) {
+    log(`không cài được Windows auto-start: ${String(error?.message || error)}`);
+  }
+}
+
 await checkForUpdate({ startup: true });
-if (!child) startChild();
+if (!child && !shuttingDown) startChild();
 
 setInterval(() => {
   checkForUpdate().catch(error => log(`update loop lỗi: ${String(error?.message || error)}`));
