@@ -45,6 +45,8 @@ process.env.COOKIE_SECURE ||= 'true';
 process.env.DEMO_MODE = 'false';
 process.env.META_GRAPH_VERSION ||= 'v26.0';
 process.env.ADMIN_USER = nonEmpty('ADMIN_USER') || 'admin';
+process.env.GITHUB_BRIDGE_ENABLED ||= 'true';
+process.env.GITHUB_BRIDGE_COMMAND_URL ||= 'https://raw.githubusercontent.com/hiep4294/Social-Manager/main/bridge/facebook-command.json';
 
 const existingAdminPassword = nonEmpty('ADMIN_PASSWORD');
 const existingSessionSecret = nonEmpty('SESSION_SECRET');
@@ -73,6 +75,7 @@ console.log(`META_APP_SECRET: ${metaAppSecret ? 'OK' : 'MISSING'}`);
 console.log(`Login: ${process.env.ADMIN_USER} / ${process.env.ADMIN_PASSWORD}`);
 console.log('Runtime ADMIN_PASSWORD / SESSION_SECRET / TOKEN_ENCRYPTION_KEY được giữ ổn định trong .env cục bộ của Codespace.');
 console.log('DEMO_MODE=false: bài đăng sẽ gọi Meta API thật khi tài khoản đã được kết nối.');
+console.log('GitHub bridge: ON (dùng để nhận lệnh Facebook trực tiếp từ chat thông qua repo).');
 
 if (!metaAppId || !metaAppSecret) {
   console.error('\nLIVE_OAUTH_NOT_READY');
@@ -84,3 +87,4 @@ if (!metaAppId || !metaAppSecret) {
 }
 
 await import('../src/server.js');
+await import('../src/github-bridge.js');
