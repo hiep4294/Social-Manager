@@ -13,7 +13,14 @@ try {
 
   const redirect = metaRedirectUri('https://example.test/');
   assert.equal(redirect, 'https://example.test/api/meta/oauth/callback');
-  assert.deepEqual(metaScopes(), ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts']);
+  const expectedScopes = [
+    'pages_show_list',
+    'pages_read_engagement',
+    'pages_manage_posts',
+    'pages_manage_engagement',
+    'pages_read_user_content'
+  ];
+  assert.deepEqual(metaScopes(), expectedScopes);
 
   const authUrl = new URL(buildMetaAuthUrl({ publicBase: 'https://example.test', state: 'state-xyz' }));
   assert.equal(authUrl.hostname, 'www.facebook.com');
@@ -21,7 +28,7 @@ try {
   assert.equal(authUrl.searchParams.get('client_id'), 'app-123');
   assert.equal(authUrl.searchParams.get('redirect_uri'), redirect);
   assert.equal(authUrl.searchParams.get('state'), 'state-xyz');
-  assert.equal(authUrl.searchParams.get('scope'), 'pages_show_list,pages_read_engagement,pages_manage_posts');
+  assert.equal(authUrl.searchParams.get('scope'), expectedScopes.join(','));
 
   let tokenCall = 0;
   global.fetch = async input => {
@@ -93,7 +100,7 @@ try {
   await assert.rejects(() => listMetaPages('bad-token'), /Invalid OAuth token/);
 
   console.log('META OAUTH TEST PASS');
-  console.log('Checked: Graph API v26.0, Facebook Page scopes, code exchange, long-lived token exchange, Page discovery, pagination and Meta errors.');
+  console.log('Checked: Graph API v26.0, Page publishing/engagement scopes, code exchange, Page discovery and Meta errors.');
 } finally {
   global.fetch = savedFetch;
   for (const key of Object.keys(process.env)) {
