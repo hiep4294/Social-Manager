@@ -256,66 +256,6 @@ async function executeCommentGroup(page, payload) {
   return { ok: true, url: page.url() };
 }
 
-async function firstGroupPostArticle(page) {
-  const articles = page.locator('div[role="feed"] div[role="article"], div[role="article"]');
-  const count = Math.min(25, await articles.count().catch(() => 0));
-  for (let i = 0; i < count; i += 1) {
-    const article = articles.nth(i);
-    if (!(await article.isVisible().catch(() => false))) continue;
-    const text = String(await article.innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
-    if (text.length < 8) continue;
-    const postLink = article.locator('a[href*="/groups/"][href*="/posts/"]').first();
-    if (await postLink.count().catch(() => 0)) return { article, text };
-  }
-  return null;
-}
-
-async function findGroupLikeButton(article) {
-  const pressed = article.locator('[role="button"][aria-pressed="true"]');
-  const pressedCount = Math.min(30, await pressed.count().catch(() => 0));
-  for (let i = 0; i < pressedCount; i += 1) {
-    const el = pressed.nth(i);
-    const label = `${await el.getAttribute('aria-label').catch(() => '')} ${await el.innerText().catch(() => '')}`.trim();
-    if (/\blike\b|thích/i.test(label)) return { state: 'already_liked', locator: el };
-  }
-
-  const candidates = [
-    article.getByRole('button', { name: /^(like|thích)$/i }),
-    article.locator('[role="button"][aria-label="Like" i]'),
-    article.locator('[role="button"][aria-label="Thích" i]'),
-    article.locator('[role="button"][aria-label*="Like" i]'),
-    article.locator('[role="button"][aria-label*="Thích" i]')
-  ];
-  for (const locator of candidates) {
-    const count = Math.min(8, await locator.count().catch(() => 0));
-    for (let i = 0; i < count; i += 1) {
-      const el = locator.nth(i);
-      if (!(await el.isVisible().catch(() => false))) continue;
-      const label = `${await el.getAttribute('aria-label').catch(() => '')} ${await el.innerText().catch(() => '')}`.trim();
-      if (/unlike|remove like|bỏ thích|gỡ.*thích/i.test(label)) return { state: 'already_liked', locator: el };
-      if (/\blike\b|thích/i.test(label)) return { state: 'ready', locator: el };
-    }
-  }
-  return null;
-}
-
-async function executeLikeFirstGroupPost(page, payload, db) {
-  const target = resolveGroupTarget(db, payload);
-  await page.goto(target.url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-  await waitStable(page);
-  await page.waitForTimeout(1200);
-  const post = await firstGroupPostArticle(page);
-  if (!post) throw Object.assign(new Error('Không tìm thấy bài viết đầu tiên trong Group'), { code: 'NEEDS_REVIEW' });
-  const like = await findGroupLikeButton(post.article);
-  if (!like) throw Object.assign(new Error('Không tìm thấy nút Like/Thích của bài đầu tiên; Facebook có thể đã đổi giao diện'), { code: 'NEEDS_REVIEW' });
-  if (like.state === 'already_liked') {
-    return { ok: true, already_liked: true, liked: false, group_url: target.url, group_name: target.name || payload.group_name || '' };
-  }
-  await like.locator.click({ timeout: 5000 });
-  await page.waitForTimeout(1200);
-  return { ok: true, already_liked: false, liked: true, group_url: target.url, group_name: target.name || payload.group_name || '' };
-}
-
 function canonicalGroupPostUrl(raw, base = 'https://www.facebook.com') {
   try {
     const url = new URL(raw, base);
@@ -327,6 +267,177 @@ function canonicalGroupPostUrl(raw, base = 'https://www.facebook.com') {
   } catch {
     return null;
   }
+}
+
+async function firstGroupPostArticle(page) {
+  const articles = page.locator('div[role="article"]');
+  const count = Math.min(40, await articles.count().catch(() => 0));
+  let best = null;
+  let bestDepth = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < count; i += 1) {
+    const article = articles.nth(i);
+    if (!(await article.isVisible().catch(() => false))) continue;
+    const text = String(await article.innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+    if (text.length < 8) continue;
+
+    const links = article.locator('a[href*="/groups/"][href*="/posts/"]');
+    const linkCount = Math.min(12, await links.count().catch(() => 0));
+    let postUrl = null;
+    for (let j = 0; j < linkCount; j += 1) {
+      const href = await links.nth(j).getAttribute('href').catch(() => null);
+      postUrl = canonicalGroupPostUrl(href, page.url());
+      if (postUrl) break;
+    }
+    if (!postUrl) continue;
+
+    const depth = await article.locator('xpath=ancestor::div[@role="article"]').count().catch(() => 99);
+    if (depth < bestDepth) {
+      best = { article, text, postUrl };
+      bestDepth = depth;
+      if (depth === 0) break;
+    }
+  }
+  return best;
+}
+
+async function articleOwnsElement(article, element) {
+  const owner = await article.elementHandle().catch(() => null);
+  if (!owner) return false;
+  return element.evaluate((node, articleNode) => node.closest('div[role="article"]') === articleNode, owner).catch(() => false);
+}
+
+function classifyLikeLabel(label, pressed) {
+  const text = String(label || '').replace(/\s+/g, ' ').trim();
+  if (/unlike|remove like|bỏ thích|gỡ.*thích/i.test(text)) return 'already_liked';
+  if (pressed && /like|thích/i.test(text)) return 'already_liked';
+  if (/^(like|thích)(\b|$)|^like this|^thích bài|^thích bình luận/i.test(text)) return 'ready';
+  return null;
+}
+
+async function findOwnedLikeButton(article) {
+  const candidates = article.locator('[role="button"]');
+  const count = Math.min(80, await candidates.count().catch(() => 0));
+  for (let i = 0; i < count; i += 1) {
+    const el = candidates.nth(i);
+    if (!(await el.isVisible().catch(() => false))) continue;
+    if (!(await articleOwnsElement(article, el))) continue;
+    const label = `${await el.getAttribute('aria-label').catch(() => '')} ${await el.innerText().catch(() => '')}`.trim();
+    const pressed = String(await el.getAttribute('aria-pressed').catch(() => '')).toLowerCase() === 'true';
+    const state = classifyLikeLabel(label, pressed);
+    if (state) return { state, locator: el, label };
+  }
+  return null;
+}
+
+async function openLikeTarget(page, payload, db) {
+  const target = payload.post_url
+    ? { url: payload.post_url, name: payload.group_name || '' }
+    : resolveGroupTarget(db, payload);
+  await page.goto(target.url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  await waitStable(page);
+  await page.waitForTimeout(1200);
+  const post = await firstGroupPostArticle(page);
+  if (!post) throw Object.assign(new Error('Không tìm thấy bài viết Facebook mục tiêu'), { code: 'NEEDS_REVIEW' });
+  return { target, post };
+}
+
+async function executeLikeGroupPost(page, payload, db) {
+  const { target, post } = await openLikeTarget(page, payload, db);
+  const like = await findOwnedLikeButton(post.article);
+  if (!like) throw Object.assign(new Error('Không tìm thấy nút Like/Thích thuộc chính bài viết; không bấm vào comment'), { code: 'NEEDS_REVIEW' });
+  if (like.state === 'already_liked') {
+    return {
+      ok: true,
+      already_liked: true,
+      liked: false,
+      post_url: post.postUrl,
+      target_url: target.url,
+      group_name: target.name || payload.group_name || ''
+    };
+  }
+  await like.locator.click({ timeout: 5000 });
+  await page.waitForTimeout(1000);
+  return {
+    ok: true,
+    already_liked: false,
+    liked: true,
+    post_url: post.postUrl,
+    target_url: target.url,
+    group_name: target.name || payload.group_name || ''
+  };
+}
+
+async function expandVisibleComments(postArticle, desiredCount) {
+  const maxRounds = Math.min(8, Math.max(2, Math.ceil(Number(desiredCount || 1) / 3) + 1));
+  for (let round = 0; round < maxRounds; round += 1) {
+    const selectors = [
+      postArticle.getByText(/view more comments|view previous comments|view all comments|xem thêm bình luận|xem bình luận trước|xem tất cả bình luận/i),
+      postArticle.getByText(/view more replies|xem thêm câu trả lời|xem thêm phản hồi/i)
+    ];
+    let clicked = false;
+    for (const locator of selectors) {
+      const count = Math.min(10, await locator.count().catch(() => 0));
+      for (let i = 0; i < count; i += 1) {
+        const el = locator.nth(i);
+        if (!(await el.isVisible().catch(() => false))) continue;
+        await el.click({ timeout: 2500 }).catch(() => {});
+        await sleep(650);
+        clicked = true;
+        break;
+      }
+      if (clicked) break;
+    }
+    if (!clicked) break;
+  }
+}
+
+async function executeLikeGroupComments(page, payload, db) {
+  const requested = Math.max(1, Math.min(20, Number(payload.count || 1)));
+  const { target, post } = await openLikeTarget(page, payload, db);
+  await expandVisibleComments(post.article, requested);
+
+  const comments = post.article.locator('div[role="article"]');
+  const visibleCount = Math.min(120, await comments.count().catch(() => 0));
+  let liked = 0;
+  let alreadyLiked = 0;
+  let withoutLikeButton = 0;
+  let examined = 0;
+
+  for (let i = 0; i < visibleCount && liked < requested; i += 1) {
+    const comment = comments.nth(i);
+    if (!(await comment.isVisible().catch(() => false))) continue;
+    const text = String(await comment.innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+    if (!text) continue;
+    examined += 1;
+
+    const like = await findOwnedLikeButton(comment);
+    if (!like) {
+      withoutLikeButton += 1;
+      continue;
+    }
+    if (like.state === 'already_liked') {
+      alreadyLiked += 1;
+      continue;
+    }
+
+    await like.locator.click({ timeout: 5000 });
+    liked += 1;
+    await sleep(900);
+  }
+
+  return {
+    ok: true,
+    requested,
+    liked,
+    already_liked_skipped: alreadyLiked,
+    examined_comments: examined,
+    comments_without_like_button: withoutLikeButton,
+    complete: liked >= requested,
+    post_url: post.postUrl,
+    target_url: target.url,
+    group_name: target.name || payload.group_name || ''
+  };
 }
 
 async function collectGroupArticles(page) {
@@ -434,7 +545,9 @@ async function executeJob(page, job, db) {
     case 'join_group': return executeJoinGroup(page, payload, db, job.brand_id);
     case 'post_group': return executePostGroup(page, payload, db);
     case 'comment_group': return executeCommentGroup(page, payload);
-    case 'like_first_group_post': return executeLikeFirstGroupPost(page, payload, db);
+    case 'like_group_post': return executeLikeGroupPost(page, payload, db);
+    case 'like_first_group_post': return executeLikeGroupPost(page, payload, db);
+    case 'like_group_comments': return executeLikeGroupComments(page, payload, db);
     case 'remember_group': {
       const asset = rememberFacebookAsset(db, {
         assetType: 'GROUP',
@@ -484,7 +597,8 @@ if (!enabled) {
   let lastActionAt = 0;
 
   function writeStatus(payload) {
-    const queued = db.prepare("SELECT COUNT(*) AS n FROM facebook_operator_jobs WHERE status='QUEUED'").get()?.n || 0;
+    const queued = db.prepare("SELECT COUNT(*) AS n FROM github_bridge_commands WHERE status='QUEUED'").get?.()?.n;
+    const operatorQueued = db.prepare("SELECT COUNT(*) AS n FROM facebook_operator_jobs WHERE status='QUEUED'").get()?.n || 0;
     const waiting = db.prepare("SELECT COUNT(*) AS n FROM facebook_operator_jobs WHERE status IN ('WAITING_USER','NEEDS_REVIEW')").get()?.n || 0;
     const activeMonitors = db.prepare('SELECT COUNT(*) AS n FROM facebook_group_monitors WHERE active=1').get()?.n || 0;
     const monitorReview = db.prepare("SELECT COUNT(*) AS n FROM facebook_group_monitor_seen WHERE status='NEEDS_REVIEW'").get()?.n || 0;
@@ -494,7 +608,7 @@ if (!enabled) {
         browser_path: browserPath,
         headless,
         profile_dir: profileDir,
-        queue: { queued, waiting },
+        queue: { queued: Number.isFinite(queued) ? queued : operatorQueued, waiting },
         group_monitor: { active: activeMonitors, needs_review: monitorReview },
         ...payload,
         updated_at: nowIso()
