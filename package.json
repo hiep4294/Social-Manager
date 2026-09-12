@@ -1,8 +1,8 @@
 {
   "name": "social-manager",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "private": true,
-  "description": "Social Manager V1.6 with Group Monitor, named Facebook assets, Page auto reply, browser operator, scheduling and generated social images",
+  "description": "Social Manager V1.6.1 with 5-10 minute Group Monitor cadence, named Facebook assets, Page auto reply, browser operator, scheduling and generated social images",
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
