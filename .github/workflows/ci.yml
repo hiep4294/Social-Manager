@@ -20,6 +20,7 @@ jobs:
       - run: node --check src/platforms/facebook.js
       - run: node --check src/platforms/instagram.js
       - run: node --check src/mcp-server.js
+      - run: node --check src/github-bridge.js
       - run: node --check scripts/start-demo.mjs
       - run: node --check scripts/start-codespace.mjs
       - run: node --check scripts/smoke-test.mjs
