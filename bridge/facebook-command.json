@@ -1,7 +1,7 @@
 {
-  "id": "fbop-20260912-remember-group-1353837944687586-001",
+  "id": "fbop-20260912-like-first-group-1353837944687586-001",
   "action": "facebook_operator",
-  "operator_action": "remember_group",
+  "operator_action": "like_first_group_post",
   "brand_id": 1,
   "payload": {
     "group_name": "Group 1353837944687586",
