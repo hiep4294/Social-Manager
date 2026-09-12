@@ -1,5 +1,10 @@
 {
-  "id": "fb-20260912-xinchao-cac-ban-003",
-  "action": "post_facebook",
-  "message": "xin chào các bạn"
+  "id": "fbop-20260912-remember-group-1353837944687586-001",
+  "action": "facebook_operator",
+  "operator_action": "remember_group",
+  "brand_id": 1,
+  "payload": {
+    "group_name": "Group 1353837944687586",
+    "group_url": "https://www.facebook.com/groups/1353837944687586/"
+  }
 }
