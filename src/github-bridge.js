@@ -6,12 +6,16 @@ import Database from 'better-sqlite3';
 import { decryptSecret } from './security.js';
 import { publishFacebook } from './platforms/facebook.js';
 
+const IMAGE_TONES = new Set(['auto', 'promo', 'greeting', 'notice', 'launch', 'professional']);
+
 export function normalizeBridgeCommand(command = {}) {
   const id = String(command?.id || '').trim();
   const action = String(command?.action || '').trim();
   const message = String(command?.message || '');
   const brandId = Number(command?.brand_id || 0) || null;
   const imageRaw = String(command?.image_url || '').trim();
+  const imageModeRaw = String(command?.image_mode || '').trim().toLowerCase();
+  const imageToneRaw = String(command?.image_tone || 'auto').trim().toLowerCase();
   const scheduledRaw = String(command?.scheduled_at || '').trim();
   const idempotencyKey = String(command?.idempotency_key || id).trim();
 
@@ -30,6 +34,14 @@ export function normalizeBridgeCommand(command = {}) {
     }
   }
 
+  let imageMode = null;
+  if (!imageUrl && imageModeRaw) {
+    if (!['auto', 'none'].includes(imageModeRaw)) return { ok: false, error: 'image_mode chỉ nhận auto hoặc none' };
+    imageMode = imageModeRaw;
+  }
+
+  if (!IMAGE_TONES.has(imageToneRaw)) return { ok: false, error: 'image_tone không hợp lệ' };
+
   let scheduledAt = null;
   if (scheduledRaw) {
     const parsed = new Date(scheduledRaw);
@@ -45,6 +57,8 @@ export function normalizeBridgeCommand(command = {}) {
       brandId,
       message,
       imageUrl,
+      imageMode,
+      imageTone: imageToneRaw,
       scheduledAt,
       idempotencyKey: idempotencyKey || id
     }
@@ -94,6 +108,9 @@ if (!enabled) {
 
   const migrations = [
     ['image_url', 'TEXT'],
+    ['image_mode', 'TEXT'],
+    ['image_tone', "TEXT DEFAULT 'auto'"],
+    ['generated_image_url', 'TEXT'],
     ['scheduled_at', 'TEXT'],
     ['idempotency_key', 'TEXT'],
     ['attempts', 'INTEGER NOT NULL DEFAULT 0']
@@ -151,14 +168,16 @@ if (!enabled) {
 
     db.prepare(`
       INSERT INTO github_bridge_commands(
-        id,action,brand_id,message,image_url,scheduled_at,idempotency_key,status,created_at,attempts
-      ) VALUES(?,?,?,?,?,?,?,?,?,0)
+        id,action,brand_id,message,image_url,image_mode,image_tone,scheduled_at,idempotency_key,status,created_at,attempts
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,0)
     `).run(
       command.id,
       command.action,
       command.brandId,
       command.message,
       command.imageUrl,
+      command.imageMode,
+      command.imageTone,
       command.scheduledAt,
       command.idempotencyKey,
       'QUEUED',
@@ -171,11 +190,32 @@ if (!enabled) {
       id: command.id,
       brand_id: command.brandId,
       has_image: Boolean(command.imageUrl),
+      image_mode: command.imageMode,
+      image_tone: command.imageTone,
       scheduled_at: command.scheduledAt,
       idempotency_key: command.idempotencyKey
     });
     console.log(`GitHub bridge: queued command=${command.id}${command.scheduledAt ? ` scheduled_at=${command.scheduledAt}` : ''}`);
     return db.prepare('SELECT * FROM github_bridge_commands WHERE id=?').get(command.id);
+  }
+
+  async function resolveImage(row, account) {
+    if (row.image_url) return { url: row.image_url, generated: false, tone: null };
+    if (row.image_mode !== 'auto') return { url: null, generated: false, tone: null };
+
+    const brand = row.brand_id
+      ? db.prepare('SELECT * FROM brands WHERE id=?').get(row.brand_id)
+      : null;
+    const { createSocialImage } = await import('./social-image.js');
+    const generated = await createSocialImage({
+      message: row.message,
+      brandName: brand?.name || account?.account_name || 'Social Manager',
+      publicBase: process.env.PUBLIC_BASE_URL,
+      uploadDir: path.join(root, 'uploads'),
+      tone: row.image_tone || 'auto'
+    });
+    db.prepare('UPDATE github_bridge_commands SET generated_image_url=? WHERE id=?').run(generated.url, row.id);
+    return { url: generated.url, generated: true, tone: generated.tone };
   }
 
   async function processCommand(row) {
@@ -192,6 +232,7 @@ if (!enabled) {
       action: row.action,
       brand_id: row.brand_id,
       has_image: Boolean(row.image_url),
+      image_mode: row.image_mode || null,
       scheduled_at: row.scheduled_at,
       status: 'PROCESSING'
     });
@@ -203,10 +244,11 @@ if (!enabled) {
 
       if (!account) throw new Error('Không tìm thấy Facebook Page đã kết nối trong Social Manager');
 
+      const image = await resolveImage(row, account);
       const accessToken = decryptSecret(account.access_token_enc);
       const result = await publishFacebook({
         message: row.message,
-        imageUrl: row.image_url || undefined,
+        imageUrl: image.url || undefined,
         pageId: account.account_id,
         accessToken
       });
@@ -225,12 +267,15 @@ if (!enabled) {
         brand_id: account.brand_id,
         page_id: account.account_id,
         page_name: account.account_name,
-        has_image: Boolean(row.image_url),
+        has_image: Boolean(image.url),
+        generated_image: image.generated,
+        image_tone: image.tone,
+        image_url: image.url,
         scheduled_at: row.scheduled_at,
         status: 'PUBLISHED',
         external_id: externalId
       });
-      console.log(`GitHub bridge: Facebook published command=${row.id} post_id=${externalId || 'unknown'}`);
+      console.log(`GitHub bridge: Facebook published command=${row.id} post_id=${externalId || 'unknown'}${image.generated ? ` generated_image=${image.url}` : ''}`);
     } catch (error) {
       const errorText = String(error?.message || error);
       db.prepare(`
@@ -244,6 +289,7 @@ if (!enabled) {
         action: row.action,
         brand_id: row.brand_id,
         has_image: Boolean(row.image_url),
+        image_mode: row.image_mode || null,
         scheduled_at: row.scheduled_at,
         status: 'FAILED',
         error: errorText
