@@ -1,11 +1,16 @@
 import crypto from 'node:crypto';
+import { cleanFacebookUrl, ensureGroupMonitorSchema, normalizeGroupMonitor } from './group-monitor-core.js';
 
 export const OPERATOR_ACTIONS = new Set([
   'create_page',
   'create_group',
   'join_group',
   'post_group',
-  'comment_group'
+  'comment_group',
+  'remember_group',
+  'monitor_group',
+  'stop_monitor_group',
+  'scan_group'
 ]);
 
 function cleanUrl(value) {
@@ -50,8 +55,9 @@ export function normalizeOperatorJob(input = {}) {
   }
 
   if (['join_group', 'post_group'].includes(action)) {
-    payload.group_url = cleanUrl(payload.group_url);
-    if (!payload.group_url) return { ok: false, error: `${action} cần group_url hợp lệ` };
+    payload.group_url = cleanFacebookUrl(payload.group_url);
+    payload.group_name = String(payload.group_name || '').trim();
+    if (!payload.group_url && !payload.group_name) return { ok: false, error: `${action} cần group_url hoặc group_name` };
   }
 
   if (action === 'post_group') {
@@ -61,10 +67,46 @@ export function normalizeOperatorJob(input = {}) {
   }
 
   if (action === 'comment_group') {
-    payload.post_url = cleanUrl(payload.post_url);
+    payload.post_url = cleanFacebookUrl(payload.post_url);
     payload.message = String(payload.message || '').trim();
-    if (!payload.post_url) return { ok: false, error: 'comment_group cần post_url hợp lệ' };
+    if (!payload.post_url) return { ok: false, error: 'comment_group cần post_url Facebook hợp lệ' };
     if (!payload.message) return { ok: false, error: 'comment_group cần message' };
+  }
+
+  if (action === 'remember_group') {
+    payload.group_name = String(payload.group_name || payload.name || '').trim();
+    payload.group_url = cleanFacebookUrl(payload.group_url || payload.url);
+    if (!payload.group_name) return { ok: false, error: 'remember_group cần group_name' };
+    if (!payload.group_url) return { ok: false, error: 'remember_group cần group_url Facebook hợp lệ' };
+  }
+
+  if (action === 'monitor_group') {
+    const normalized = normalizeGroupMonitor({ ...payload, brand_id: brandId });
+    if (!normalized.ok) return normalized;
+    Object.assign(payload, {
+      group_name: normalized.value.groupName,
+      group_url: normalized.value.groupUrl,
+      keywords: normalized.value.keywords,
+      watch_all: normalized.value.watchAll,
+      mode: normalized.value.mode,
+      reply_message: normalized.value.replyTemplate,
+      poll_seconds: normalized.value.pollSeconds,
+      max_replies_per_hour: normalized.value.maxRepliesPerHour
+    });
+  }
+
+  if (action === 'stop_monitor_group') {
+    payload.monitor_id = Number(payload.monitor_id || 0) || null;
+    payload.group_name = String(payload.group_name || '').trim();
+    payload.group_url = cleanFacebookUrl(payload.group_url);
+    if (!payload.monitor_id && !payload.group_name && !payload.group_url) {
+      return { ok: false, error: 'stop_monitor_group cần monitor_id, group_name hoặc group_url' };
+    }
+  }
+
+  if (action === 'scan_group') {
+    payload.monitor_id = Number(payload.monitor_id || 0) || null;
+    if (!payload.monitor_id) return { ok: false, error: 'scan_group cần monitor_id' };
   }
 
   return {
@@ -98,6 +140,7 @@ export function ensureOperatorSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_fb_operator_due
       ON facebook_operator_jobs(status, scheduled_at, created_at);
   `);
+  ensureGroupMonitorSchema(db);
 }
 
 export function enqueueOperatorJob(db, input = {}) {
