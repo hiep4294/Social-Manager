@@ -1,8 +1,8 @@
 {
   "name": "social-manager",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
-  "description": "Social Manager V1.3 with Facebook OAuth, direct chat bridge, scheduling, image URL posts and idempotency",
+  "description": "Social Manager V1.4 with Facebook OAuth, direct chat bridge, auto update, scheduling, idempotency and generated social images",
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
@@ -13,8 +13,9 @@
     "test:meta": "node tests/meta-oauth.test.mjs",
     "test:mcp": "node tests/mcp.test.mjs",
     "test:bridge": "node tests/github-bridge.test.mjs",
+    "test:image": "node tests/social-image.test.mjs",
     "test:smoke": "node scripts/smoke-test.mjs",
-    "test": "npm run test:facebook && npm run test:meta && npm run test:mcp && npm run test:bridge && npm run test:smoke"
+    "test": "npm run test:facebook && npm run test:meta && npm run test:mcp && npm run test:bridge && npm run test:image && npm run test:smoke"
   },
   "dependencies": {
     "@modelcontextprotocol/node": "^2.0.0",
@@ -25,6 +26,7 @@
     "express": "^4.21.2",
     "express-session": "^1.18.1",
     "multer": "^1.4.5-lts.1",
+    "sharp": "^0.34.3",
     "zod": "^4.0.0"
   },
   "devDependencies": {
