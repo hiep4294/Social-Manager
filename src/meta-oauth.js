@@ -13,7 +13,10 @@ export function metaRedirectUri(publicBase) {
 }
 
 export function metaScopes() {
-  return (process.env.META_OAUTH_SCOPES || 'pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish')
+  // Facebook Page first. Instagram permissions are intentionally excluded here
+  // because Meta no longer accepts instagram_basic / instagram_content_publish
+  // in this Facebook Login flow for the current app configuration.
+  return (process.env.META_OAUTH_SCOPES || 'pages_show_list,pages_read_engagement,pages_manage_posts')
     .split(',')
     .map(x => x.trim())
     .filter(Boolean);
@@ -78,7 +81,9 @@ export async function exchangeMetaCode({ code, publicBase }) {
 
 export async function listMetaPages(userAccessToken) {
   const first = new URL(`https://graph.facebook.com/${version()}/me/accounts`);
-  first.searchParams.set('fields', 'id,name,category,access_token,instagram_business_account{id,username,name,profile_picture_url}');
+  // Keep Page discovery Facebook-only for the first live test. Instagram will be
+  // connected through its own supported login/API flow in a later step.
+  first.searchParams.set('fields', 'id,name,category,access_token');
   first.searchParams.set('limit', '100');
   first.searchParams.set('access_token', userAccessToken);
 
@@ -93,12 +98,7 @@ export async function listMetaPages(userAccessToken) {
         pageName: page.name || '',
         category: page.category || '',
         pageAccessToken: page.access_token,
-        instagram: page.instagram_business_account ? {
-          id: String(page.instagram_business_account.id),
-          username: page.instagram_business_account.username || '',
-          name: page.instagram_business_account.name || '',
-          picture: page.instagram_business_account.profile_picture_url || ''
-        } : null
+        instagram: null
       });
     }
     next = data?.paging?.next || null;
