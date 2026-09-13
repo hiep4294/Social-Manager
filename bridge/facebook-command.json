@@ -1,8 +1,7 @@
 {
-  "id": "fbop-20260912-like-first-group-1353837944687586-001",
+  "id": "fbop-bootstrap-remember-group-1353837944687586-v170",
   "action": "facebook_operator",
-  "operator_action": "like_first_group_post",
-  "brand_id": 1,
+  "operator_action": "remember_group",
   "payload": {
     "group_name": "Group 1353837944687586",
     "group_url": "https://www.facebook.com/groups/1353837944687586/"
