@@ -4,15 +4,16 @@ import { spawnSync } from 'node:child_process';
 
 const RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
 const RUN_VALUE = 'SocialManagerFacebookOperatorAgent';
+const TASK_NAME = 'SocialManagerFacebookOperatorAgent';
 
-function runReg(args, { allowFailure = false } = {}) {
-  const result = spawnSync('reg.exe', args, {
+function runExe(command, args, { allowFailure = false } = {}) {
+  const result = spawnSync(command, args, {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true
   });
   if (!allowFailure && (result.error || result.status !== 0)) {
-    throw result.error || new Error((result.stderr || result.stdout || 'reg.exe lỗi').trim());
+    throw result.error || new Error((result.stderr || result.stdout || `${command} lỗi`).trim());
   }
   return {
     status: result.status ?? (result.error ? 1 : 0),
@@ -20,6 +21,14 @@ function runReg(args, { allowFailure = false } = {}) {
     stderr: String(result.stderr || '').trim(),
     error: result.error || null
   };
+}
+
+function runReg(args, options) {
+  return runExe('reg.exe', args, options);
+}
+
+function runTask(args, options) {
+  return runExe('schtasks.exe', args, options);
 }
 
 function vbsEscape(value) {
@@ -36,11 +45,22 @@ function writeIfChanged(file, content) {
 
 export function windowsAutostartPaths(root, nodePath = process.execPath) {
   const dataDir = path.join(root, 'data');
-  const supervisor = path.join(root, 'scripts', 'start-facebook-operator-agent.mjs');
+  const watchdog = path.join(root, 'scripts', 'facebook-operator-agent-watchdog.mjs');
   const cmdPath = path.join(dataDir, 'start-facebook-operator-agent-background.cmd');
   const vbsPath = path.join(dataDir, 'start-facebook-operator-agent-background.vbs');
   const logPath = path.join(dataDir, 'operator-agent-background.log');
-  return { dataDir, supervisor, cmdPath, vbsPath, logPath, nodePath };
+  return { dataDir, watchdog, cmdPath, vbsPath, logPath, nodePath };
+}
+
+function installRegistryFallback(runCommand) {
+  runReg([
+    'add', RUN_KEY,
+    '/v', RUN_VALUE,
+    '/t', 'REG_SZ',
+    '/d', runCommand,
+    '/f'
+  ]);
+  return 'REGISTRY_RUN';
 }
 
 export function installWindowsAgentAutostart({ root, nodePath = process.execPath } = {}) {
@@ -52,8 +72,8 @@ export function installWindowsAgentAutostart({ root, nodePath = process.execPath
 
   const cmd = [
     '@echo off',
-    `cd /d "${paths.dataDir.replace(/\\data$/, '')}"`,
-    `"${paths.nodePath}" "${paths.supervisor}" >> "${paths.logPath}" 2>&1`,
+    `cd /d "${root}"`,
+    `"${paths.nodePath}" "${paths.watchdog}" >> "${paths.logPath}" 2>&1`,
     ''
   ].join('\r\n');
 
@@ -68,37 +88,57 @@ export function installWindowsAgentAutostart({ root, nodePath = process.execPath
   const vbsChanged = writeIfChanged(paths.vbsPath, vbs);
   const runCommand = `wscript.exe //B //Nologo "${paths.vbsPath}"`;
 
-  runReg([
-    'add', RUN_KEY,
-    '/v', RUN_VALUE,
-    '/t', 'REG_SZ',
-    '/d', runCommand,
-    '/f'
-  ]);
+  let mode = null;
+  let taskError = null;
+  const task = runTask([
+    '/Create',
+    '/TN', TASK_NAME,
+    '/SC', 'ONLOGON',
+    '/TR', runCommand,
+    '/RL', 'LIMITED',
+    '/F'
+  ], { allowFailure: true });
+
+  if (task.status === 0) {
+    mode = 'TASK_SCHEDULER';
+    runReg(['delete', RUN_KEY, '/v', RUN_VALUE, '/f'], { allowFailure: true });
+  } else {
+    taskError = task.stderr || task.stdout || 'schtasks.exe lỗi';
+    mode = installRegistryFallback(runCommand);
+  }
 
   return {
     ok: true,
     installed: true,
     changed: cmdChanged || vbsChanged,
+    mode,
+    task_name: TASK_NAME,
     run_key: RUN_KEY,
     run_value: RUN_VALUE,
     command: runCommand,
-    log_path: paths.logPath
+    log_path: paths.logPath,
+    task_error: taskError
   };
 }
 
 export function getWindowsAgentAutostartStatus() {
   if (process.platform !== 'win32') return { ok: false, skipped: true, reason: 'WINDOWS_ONLY' };
-  const result = runReg(['query', RUN_KEY, '/v', RUN_VALUE], { allowFailure: true });
+  const task = runTask(['/Query', '/TN', TASK_NAME], { allowFailure: true });
+  const registry = runReg(['query', RUN_KEY, '/v', RUN_VALUE], { allowFailure: true });
   return {
     ok: true,
-    installed: result.status === 0,
-    output: result.stdout || result.stderr
+    installed: task.status === 0 || registry.status === 0,
+    mode: task.status === 0 ? 'TASK_SCHEDULER' : registry.status === 0 ? 'REGISTRY_RUN' : null,
+    task_installed: task.status === 0,
+    registry_installed: registry.status === 0,
+    task_output: task.stdout || task.stderr,
+    registry_output: registry.stdout || registry.stderr
   };
 }
 
 export function removeWindowsAgentAutostart({ root, nodePath = process.execPath } = {}) {
   if (process.platform !== 'win32') return { ok: false, skipped: true, reason: 'WINDOWS_ONLY' };
+  runTask(['/Delete', '/TN', TASK_NAME, '/F'], { allowFailure: true });
   runReg(['delete', RUN_KEY, '/v', RUN_VALUE, '/f'], { allowFailure: true });
 
   if (root) {
@@ -108,5 +148,11 @@ export function removeWindowsAgentAutostart({ root, nodePath = process.execPath 
     }
   }
 
-  return { ok: true, installed: false, run_key: RUN_KEY, run_value: RUN_VALUE };
+  return {
+    ok: true,
+    installed: false,
+    task_name: TASK_NAME,
+    run_key: RUN_KEY,
+    run_value: RUN_VALUE
+  };
 }
