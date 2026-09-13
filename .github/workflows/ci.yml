@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, stable]
   pull_request:
 
 jobs:
@@ -24,17 +24,19 @@ jobs:
       - run: node --check src/facebook-operator-core.js
       - run: node --check src/facebook-operator-worker.js
       - run: node --check src/operator-command-poller.js
+      - run: node --check src/operator-reliability-worker.js
       - run: node --check src/group-monitor-core.js
       - run: node --check src/group-monitor-scheduler.js
+      - run: node --check src/windows-agent-autostart.js
       - run: node --check src/mcp-server.js
       - run: node --check src/github-bridge.js
       - run: node --check src/social-image.js
       - run: node --check src/runtime-auto-update.js
-      - run: node --check src/windows-agent-autostart.js
       - run: node --check scripts/start-demo.mjs
       - run: node --check scripts/start-codespace.mjs
       - run: node --check scripts/start-facebook-operator-agent.mjs
       - run: node --check scripts/facebook-operator-agent-runtime.mjs
+      - run: node --check scripts/facebook-operator-agent-watchdog.mjs
       - run: node --check scripts/restart-facebook-operator-agent.mjs
       - run: node --check scripts/manage-facebook-operator-autostart.mjs
       - run: node --check scripts/operator-login.mjs
@@ -48,6 +50,8 @@ jobs:
       - run: node --check tests/github-bridge.test.mjs
       - run: node --check tests/social-image.test.mjs
       - run: node --check tests/runtime-auto-update.test.mjs
+      - name: Validate operator queue JSON
+        run: node -e "const fs=require('fs');const q=JSON.parse(fs.readFileSync('bridge/operator-queue.json','utf8'));if(q.version!==1||!Array.isArray(q.commands))throw new Error('Invalid operator queue');"
       - name: Check inline browser JavaScript syntax
         run: node -e "const fs=require('fs');const html=fs.readFileSync('public/index.html','utf8');const m=html.match(/<script>([\\s\\S]*)<\\/script>/);if(!m)throw new Error('Missing script');new Function(m[1]);"
       - name: Facebook adapter integration test
