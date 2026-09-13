@@ -23,6 +23,7 @@ const expectedRepository = String(process.env.FB_AGENT_UPDATE_REPOSITORY || 'hie
 const updateBranchRaw = String(process.env.FB_AGENT_UPDATE_BRANCH || 'stable').trim();
 const updateBranch = /^[A-Za-z0-9._/-]+$/.test(updateBranchRaw) ? updateBranchRaw : 'stable';
 const updateRemoteRef = `origin/${updateBranch}`;
+const watchdogManaged = String(process.env.FB_AGENT_WATCHDOG_CHILD || '').toLowerCase() === 'true';
 
 fs.mkdirSync(path.dirname(logPath), { recursive: true });
 
@@ -297,9 +298,13 @@ async function checkForUpdate({ startup = false } = {}) {
     log(`cập nhật thành công lên ${remoteHead.slice(0, 7)} từ kênh ${updateBranch}`);
 
     if (fullSupervisorRestart) {
-      log('thành phần Supervisor thay đổi; thực hiện full restart để nạp code mới');
-      spawnSupervisorRestartHelper();
       shuttingDown = true;
+      if (watchdogManaged) {
+        log('thành phần Supervisor thay đổi; Watchdog sẽ tự khởi động lại Supervisor.');
+      } else {
+        log('thành phần Supervisor thay đổi; thực hiện full restart để nạp code mới');
+        spawnSupervisorRestartHelper();
+      }
       setTimeout(() => process.exit(0), 350);
     } else {
       log('tự khởi động lại Agent runtime');
@@ -343,6 +348,7 @@ await acquireSingleInstance();
 console.log('Social Manager Facebook Operator Agent Supervisor');
 console.log(`Auto update: ${autoUpdateEnabled ? 'ON' : 'OFF'} | channel=${updateBranch} | mỗi ${Math.round(updateCheckMs / 1000)} giây`);
 console.log(`Windows auto-start: ${process.platform === 'win32' && autoStartEnabled ? 'ON' : 'OFF'}`);
+console.log(`Watchdog managed: ${watchdogManaged ? 'YES' : 'NO'}`);
 console.log('Update policy: trusted repo + stable channel + clean source + không cắt ngang job + fast-forward only + npm test + rollback nếu lỗi.');
 
 if (process.platform === 'win32' && autoStartEnabled) {
