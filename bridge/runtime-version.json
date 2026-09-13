@@ -1,5 +1,5 @@
 {
-  "version": "1.6.1",
+  "version": "1.7.0",
   "channel": "main",
-  "notes": "Group Monitor defaults to 10-minute scans with a 5-minute minimum; Page auto reply and Facebook Operator unchanged"
+  "notes": "V1.7 adds expiring multi-command operator queue, replay protection, known-Group guard, action rate limits, stale-job recovery, heartbeat, rolling SQLite backup, watchdog auto-start and stable Agent updates."
 }
