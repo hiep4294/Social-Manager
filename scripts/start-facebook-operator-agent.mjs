@@ -20,6 +20,9 @@ const autoUpdateEnabled = String(process.env.FB_AGENT_AUTO_UPDATE ?? 'true').toL
 const autoStartEnabled = String(process.env.FB_AGENT_AUTOSTART ?? 'true').toLowerCase() !== 'false';
 const updateCheckMs = Math.max(30_000, Number(process.env.FB_AGENT_AUTO_UPDATE_MS || 60_000));
 const expectedRepository = String(process.env.FB_AGENT_UPDATE_REPOSITORY || 'hiep4294/Social-Manager').trim().toLowerCase();
+const updateBranchRaw = String(process.env.FB_AGENT_UPDATE_BRANCH || 'stable').trim();
+const updateBranch = /^[A-Za-z0-9._/-]+$/.test(updateBranchRaw) ? updateBranchRaw : 'stable';
+const updateRemoteRef = `origin/${updateBranch}`;
 
 fs.mkdirSync(path.dirname(logPath), { recursive: true });
 
@@ -132,6 +135,7 @@ function supervisorChanged(files) {
   return files.some(file => [
     'scripts/start-facebook-operator-agent.mjs',
     'scripts/restart-facebook-operator-agent.mjs',
+    'scripts/facebook-operator-agent-watchdog.mjs',
     'src/windows-agent-autostart.js'
   ].includes(file));
 }
@@ -235,14 +239,14 @@ async function checkForUpdate({ startup = false } = {}) {
       return false;
     }
 
-    const fetchResult = git(['fetch', '--quiet', 'origin', 'main'], { allowFailure: true });
+    const fetchResult = git(['fetch', '--quiet', 'origin', updateBranch], { allowFailure: true });
     if (fetchResult.status !== 0) {
-      logSkipOnce(`chưa kiểm tra được bản mới: ${fetchResult.stderr || fetchResult.stdout || 'git fetch lỗi'}`);
+      logSkipOnce(`chưa kiểm tra được kênh ${updateBranch}: ${fetchResult.stderr || fetchResult.stdout || 'git fetch lỗi'}`);
       return false;
     }
 
     oldHead = git(['rev-parse', 'HEAD']).stdout;
-    const remoteHead = git(['rev-parse', 'origin/main']).stdout;
+    const remoteHead = git(['rev-parse', updateRemoteRef]).stdout;
     if (!oldHead || !remoteHead || oldHead === remoteHead) {
       lastSkipReason = '';
       return false;
@@ -255,13 +259,13 @@ async function checkForUpdate({ startup = false } = {}) {
 
     const ff = git(['merge-base', '--is-ancestor', oldHead, remoteHead], { allowFailure: true });
     if (ff.status !== 0) {
-      logSkipOnce('nhánh local không thể fast-forward tới origin/main; tạm hoãn auto update');
+      logSkipOnce(`nhánh local không thể fast-forward tới ${updateRemoteRef}; tạm hoãn auto update`);
       return false;
     }
 
     const files = changedFiles(oldHead, remoteHead);
     if (!agentRuntimeChanged(files)) {
-      git(['merge', '--ff-only', 'origin/main']);
+      git(['merge', '--ff-only', updateRemoteRef]);
       lastSkipReason = '';
       return false;
     }
@@ -275,14 +279,14 @@ async function checkForUpdate({ startup = false } = {}) {
     lastSkipReason = '';
     dependencyUpdate = dependenciesChanged(files);
     fullSupervisorRestart = supervisorChanged(files);
-    log(`phát hiện bản Agent mới ${oldHead.slice(0, 7)} -> ${remoteHead.slice(0, 7)}${startup ? ' khi khởi động' : ''}`);
+    log(`phát hiện bản Agent mới từ kênh ${updateBranch}: ${oldHead.slice(0, 7)} -> ${remoteHead.slice(0, 7)}${startup ? ' khi khởi động' : ''}`);
 
     if (child) {
       await stopChild();
       childWasStopped = true;
     }
 
-    git(['merge', '--ff-only', 'origin/main']);
+    git(['merge', '--ff-only', updateRemoteRef]);
     if (dependencyUpdate) {
       log('dependency thay đổi; đang cài lại package');
       installDependencies();
@@ -290,7 +294,7 @@ async function checkForUpdate({ startup = false } = {}) {
 
     log('đang tự kiểm thử bản cập nhật bằng npm test');
     run(npmCommand, ['test']);
-    log(`cập nhật thành công lên ${remoteHead.slice(0, 7)}`);
+    log(`cập nhật thành công lên ${remoteHead.slice(0, 7)} từ kênh ${updateBranch}`);
 
     if (fullSupervisorRestart) {
       log('thành phần Supervisor thay đổi; thực hiện full restart để nạp code mới');
@@ -337,14 +341,15 @@ process.once('SIGTERM', () => { shutdown('SIGTERM').catch(() => process.exit(0))
 await acquireSingleInstance();
 
 console.log('Social Manager Facebook Operator Agent Supervisor');
-console.log(`Auto update: ${autoUpdateEnabled ? 'ON' : 'OFF'} | origin/main | mỗi ${Math.round(updateCheckMs / 1000)} giây`);
+console.log(`Auto update: ${autoUpdateEnabled ? 'ON' : 'OFF'} | channel=${updateBranch} | mỗi ${Math.round(updateCheckMs / 1000)} giây`);
 console.log(`Windows auto-start: ${process.platform === 'win32' && autoStartEnabled ? 'ON' : 'OFF'}`);
-console.log('Update policy: trusted repo + clean source + không cắt ngang job + fast-forward only + npm test + rollback nếu lỗi.');
+console.log('Update policy: trusted repo + stable channel + clean source + không cắt ngang job + fast-forward only + npm test + rollback nếu lỗi.');
 
 if (process.platform === 'win32' && autoStartEnabled) {
   try {
     const result = installWindowsAgentAutostart({ root, nodePath: process.execPath });
-    log(`Windows auto-start đã sẵn sàng; log nền: ${result.log_path}`);
+    log(`Windows auto-start đã sẵn sàng mode=${result.mode}; log nền: ${result.log_path}`);
+    if (result.task_error) log(`Task Scheduler fallback: ${result.task_error}`);
   } catch (error) {
     log(`không cài được Windows auto-start: ${String(error?.message || error)}`);
   }
