@@ -37,7 +37,7 @@ function startSupervisor() {
   if (child || shuttingDown) return;
   const proc = spawn(process.execPath, [supervisorScript], {
     cwd: root,
-    env: process.env,
+    env: { ...process.env, FB_AGENT_WATCHDOG_CHILD: 'true' },
     stdio: 'inherit',
     windowsHide: true
   });
