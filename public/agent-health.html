@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Social Manager Agent Health</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;background:#f5f6f8;color:#111827}
+    main{max-width:920px;margin:32px auto;padding:0 16px}
+    h1{font-size:24px;margin:0 0 16px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+    .label{font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em}.value{font-size:18px;font-weight:700;margin-top:4px;word-break:break-word}
+    .ok{color:#047857}.warn{color:#b45309}.bad{color:#b91c1c}pre{white-space:pre-wrap;word-break:break-word;font-size:12px;background:#111827;color:#e5e7eb;padding:14px;border-radius:10px;overflow:auto}
+  </style>
+</head>
+<body>
+<main>
+  <h1>Facebook Operator Agent</h1>
+  <div id="cards" class="grid"></div>
+  <h2>Chi tiết</h2>
+  <pre id="raw">Đang tải...</pre>
+</main>
+<script>
+const cards=document.getElementById('cards');
+const raw=document.getElementById('raw');
+function card(label,value,cls=''){const el=document.createElement('div');el.className='card';el.innerHTML=`<div class="label">${label}</div><div class="value ${cls}">${value}</div>`;cards.appendChild(el)}
+async function load(){
+  try{
+    const r=await fetch('/agent-health.json?_='+Date.now(),{cache:'no-store'});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const d=await r.json();
+    cards.innerHTML='';
+    const age=Date.now()-new Date(d.heartbeat_at||0).getTime();
+    const online=Boolean(d.online)&&Number.isFinite(age)&&age<60000;
+    card('Agent',online?'ONLINE':'STALE/OFFLINE',online?'ok':'bad');
+    card('Version',d.version||'-');
+    card('Update channel',d.update_channel||'-');
+    card('Auto update',d.auto_update?'ON':'OFF',d.auto_update?'ok':'warn');
+    card('Auto start',d.auto_start?'ON':'OFF',d.auto_start?'ok':'warn');
+    card('Queued',String(d.queue?.counts?.QUEUED||0));
+    card('Processing',String(d.queue?.counts?.PROCESSING||0));
+    card('Needs review',String(d.queue?.counts?.NEEDS_REVIEW||0),d.queue?.counts?.NEEDS_REVIEW?'warn':'');
+    card('Last job',d.queue?.last_job?`${d.queue.last_job.action} / ${d.queue.last_job.status}`:'-');
+    card('Heartbeat',d.heartbeat_at||'-');
+    raw.textContent=JSON.stringify(d,null,2);
+  }catch(e){cards.innerHTML='';card('Agent','NO HEALTH DATA','bad');raw.textContent=String(e)}
+}
+load();setInterval(load,15000);
+</script>
+</body>
+</html>
