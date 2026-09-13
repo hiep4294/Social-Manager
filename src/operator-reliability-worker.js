@@ -25,7 +25,7 @@ if (!enabled) {
   ensureOperatorSchema(db);
 
   const heartbeatMs = Math.max(5000, Number(process.env.FB_OPERATOR_HEARTBEAT_MS || 15000));
-  const leaseMs = Math.max(60000, Number(process.env.FB_OPERATOR_JOB_LEASE_MS || 180000));
+  const leaseMs = Math.max(60000, Number(process.env.FB_OPERATOR_JOB_LEASE_MS || 600000));
   const maxAttempts = Math.max(1, Number(process.env.FB_OPERATOR_MAX_ATTEMPTS || 3));
   const statusPath = path.join(publicDir, 'agent-health.json');
   const backupDir = path.join(dataDir, 'backups');
