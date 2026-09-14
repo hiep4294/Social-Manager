@@ -32,6 +32,7 @@ jobs:
       - run: node --check src/github-bridge.js
       - run: node --check src/social-image.js
       - run: node --check src/runtime-auto-update.js
+      - run: node --check src/food-network-core.js
       - run: node --check scripts/start-demo.mjs
       - run: node --check scripts/start-codespace.mjs
       - run: node --check scripts/start-facebook-operator-agent.mjs
@@ -41,6 +42,7 @@ jobs:
       - run: node --check scripts/restart-facebook-operator-agent.mjs
       - run: node --check scripts/manage-facebook-operator-autostart.mjs
       - run: node --check scripts/operator-login.mjs
+      - run: node --check scripts/food-network-plan.mjs
       - run: node --check scripts/smoke-test.mjs
       - run: node --check tests/facebook.test.mjs
       - run: node --check tests/facebook-engagement.test.mjs
@@ -51,6 +53,7 @@ jobs:
       - run: node --check tests/github-bridge.test.mjs
       - run: node --check tests/social-image.test.mjs
       - run: node --check tests/runtime-auto-update.test.mjs
+      - run: node --check tests/food-network.test.mjs
       - name: Validate operator queue JSON
         run: node -e "const fs=require('fs');const q=JSON.parse(fs.readFileSync('bridge/operator-queue.json','utf8'));if(q.version!==1||!Array.isArray(q.commands))throw new Error('Invalid operator queue');"
       - name: Check inline browser JavaScript syntax
@@ -73,5 +76,9 @@ jobs:
         run: npm run test:image
       - name: Runtime auto update test
         run: npm run test:auto
+      - name: Food Network planner test
+        run: npm run test:food
+      - name: Food Network planning smoke test
+        run: FOOD_NETWORK_PLAN_DAYS=30 npm run food:plan
       - name: End-to-end smoke test
         run: npm run test:smoke
