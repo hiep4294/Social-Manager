@@ -21,7 +21,7 @@ function checkpoint() {
 
 function fieldByPattern(pattern) {
   const fields = [...document.querySelectorAll('input,textarea,[contenteditable="true"]')].filter(visible);
-  return fields.find(el => pattern.test(`${el.getAttribute('aria-label') || ''} ${el.getAttribute('placeholder') || ''} ${el.getAttribute('name') || ''}`)) || null;
+  return fields.find(el => pattern.test(normalize(`${el.getAttribute('aria-label') || ''} ${el.getAttribute('placeholder') || ''} ${el.getAttribute('name') || ''}`))) || null;
 }
 
 function setField(el, value) {
@@ -42,7 +42,7 @@ function setField(el, value) {
 
 function clickableByText(pattern, root = document) {
   const nodes = [...root.querySelectorAll('button,[role="button"],[role="option"]')].filter(visible);
-  return nodes.find(el => pattern.test(textOf(el)) || pattern.test(el.getAttribute('aria-label') || '')) || null;
+  return nodes.find(el => pattern.test(normalize(textOf(el))) || pattern.test(normalize(el.getAttribute('aria-label') || ''))) || null;
 }
 
 async function waitFor(fn, timeoutMs = 15000, intervalMs = 400) {
