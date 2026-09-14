@@ -6,5 +6,6 @@ public/bridge-status.json
 public/facebook-operator-status.json
 public/operator-command-status.json
 public/agent-health.json
+public/food-network-status.json
 *.log
 .DS_Store
