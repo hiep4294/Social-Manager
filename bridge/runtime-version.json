@@ -1,5 +1,5 @@
 {
-  "version": "1.8.0",
+  "version": "1.9.0",
   "channel": "main",
-  "notes": "V1.8 adds a 24-page food-content network plan, 365-day calendar, recipe rotation without same-day duplication, per-page voice/theme, image prompts, dashboard and CI coverage. Real Page creation and publishing remain approval-gated until the Page and dish-image workflow is connected."
+  "notes": "V1.9 adds automatic Food Network scheduling, Page creation, daily recipe publishing and licensed dish-image sourcing with fail-safe handling."
 }
