@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { foodPageBlueprints, foodRecipes, plannedCreateDate, pickRecipeForPage, buildRecipePost } from '../src/food-network-core.js';
+import { foodPageBlueprints, foodRecipes, pickRecipeForPage, buildRecipePost } from '../src/food-network-core.js';
 
 const root = process.cwd();
 const dataDir = path.join(root, 'data');
@@ -9,10 +9,18 @@ fs.mkdirSync(dataDir, { recursive: true });
 fs.mkdirSync(publicDir, { recursive: true });
 
 const startDate = process.env.FOOD_NETWORK_START_DATE || new Date().toISOString();
-const days = Math.max(30, Math.min(366, Number(process.env.FOOD_NETWORK_PLAN_DAYS || 30)));
+const days = Math.max(30, Math.min(366, Number(process.env.FOOD_NETWORK_PLAN_DAYS || 365)));
+const startMs = new Date(startDate).getTime();
+if (!Number.isFinite(startMs)) throw new Error('FOOD_NETWORK_START_DATE không hợp lệ');
+
+function operationalCreateDate(slot) {
+  const spacingDays = 365 / 24;
+  return new Date(startMs + Math.round((slot - 1) * spacingDays * 86400000)).toISOString();
+}
+
 const pages = foodPageBlueprints().map(page => ({
   ...page,
-  planned_create_at: plannedCreateDate(startDate, page.slot),
+  planned_create_at: operationalCreateDate(page.slot),
   status: 'PLANNED',
   publishing: 'APPROVAL_REQUIRED'
 }));
@@ -20,7 +28,7 @@ const pages = foodPageBlueprints().map(page => ({
 const recipes = foodRecipes();
 const calendar = [];
 for (let dayOffset = 0; dayOffset < days; dayOffset += 1) {
-  const date = new Date(new Date(startDate).getTime() + dayOffset * 86400000).toISOString().slice(0, 10);
+  const date = new Date(startMs + dayOffset * 86400000).toISOString().slice(0, 10);
   const used = [];
   for (const page of pages) {
     const recipe = pickRecipeForPage({ pageSlot: page.slot, date, usedRecipeIds: used });
@@ -42,11 +50,11 @@ for (let dayOffset = 0; dayOffset < days; dayOffset += 1) {
 }
 
 const output = {
-  version: 1,
+  version: 2,
   generated_at: new Date().toISOString(),
   start_date: startDate,
   target_pages: 24,
-  create_rate: '2 pages/month',
+  create_rate: '24 pages/365 days (~1 page/15.2 days)',
   post_rate: '1 post/day/active page',
   safety_mode: 'APPROVAL_REQUIRED',
   pages,
