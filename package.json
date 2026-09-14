@@ -5,9 +5,11 @@
   "description": "Social Manager V1.8 with Facebook operator reliability plus a 24-page food content planning system",
   "type": "module",
   "scripts": {
+    "prestart": "node scripts/food-network-plan.mjs",
     "start": "node src/server.js",
     "mcp": "node src/mcp-server.js",
     "demo": "node scripts/start-demo.mjs",
+    "precodespace": "node scripts/food-network-plan.mjs",
     "codespace": "node scripts/start-codespace.mjs",
     "operator": "node src/facebook-operator-worker.js",
     "operator:login": "node scripts/operator-login.mjs",
