@@ -63,6 +63,10 @@ function installRegistryFallback(runCommand) {
   return 'REGISTRY_RUN';
 }
 
+function existingScheduledTask() {
+  return runTask(['/Query', '/TN', TASK_NAME], { allowFailure: true });
+}
+
 export function installWindowsAgentAutostart({ root, nodePath = process.execPath } = {}) {
   if (process.platform !== 'win32') return { ok: false, skipped: true, reason: 'WINDOWS_ONLY' };
   if (!root) throw new Error('Thiếu root để cấu hình Windows auto-start');
@@ -90,21 +94,36 @@ export function installWindowsAgentAutostart({ root, nodePath = process.execPath
 
   let mode = null;
   let taskError = null;
-  const task = runTask([
-    '/Create',
-    '/TN', TASK_NAME,
-    '/SC', 'ONLOGON',
-    '/TR', runCommand,
-    '/RL', 'LIMITED',
-    '/F'
-  ], { allowFailure: true });
+  let taskExisting = false;
 
-  if (task.status === 0) {
+  // Important: do not recreate an existing scheduled task on every Agent start.
+  // A task created from an elevated shell may be queryable/runnable later but not
+  // replaceable by a normal user process. Re-running /Create /F in that state
+  // returns "Access is denied" and previously caused an unnecessary Registry
+  // fallback, producing two logon triggers. The task target is the stable VBS
+  // path, whose contents are refreshed above, so an existing task remains valid.
+  const existing = existingScheduledTask();
+  if (existing.status === 0) {
     mode = 'TASK_SCHEDULER';
+    taskExisting = true;
     runReg(['delete', RUN_KEY, '/v', RUN_VALUE, '/f'], { allowFailure: true });
   } else {
-    taskError = task.stderr || task.stdout || 'schtasks.exe lỗi';
-    mode = installRegistryFallback(runCommand);
+    const task = runTask([
+      '/Create',
+      '/TN', TASK_NAME,
+      '/SC', 'ONLOGON',
+      '/TR', runCommand,
+      '/RL', 'LIMITED',
+      '/F'
+    ], { allowFailure: true });
+
+    if (task.status === 0) {
+      mode = 'TASK_SCHEDULER';
+      runReg(['delete', RUN_KEY, '/v', RUN_VALUE, '/f'], { allowFailure: true });
+    } else {
+      taskError = task.stderr || task.stdout || 'schtasks.exe lỗi';
+      mode = installRegistryFallback(runCommand);
+    }
   }
 
   return {
@@ -112,6 +131,7 @@ export function installWindowsAgentAutostart({ root, nodePath = process.execPath
     installed: true,
     changed: cmdChanged || vbsChanged,
     mode,
+    task_existing: taskExisting,
     task_name: TASK_NAME,
     run_key: RUN_KEY,
     run_value: RUN_VALUE,
