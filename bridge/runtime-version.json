@@ -1,5 +1,5 @@
 {
-  "version": "1.9.0",
+  "version": "1.9.1",
   "channel": "main",
-  "notes": "V1.9 adds automatic Food Network scheduling, Page creation, daily recipe publishing and licensed dish-image sourcing with fail-safe handling."
+  "notes": "V1.9.1 adds bounded self-healing for transient operator failures, state repair for Food Network jobs, temporary-file cleanup, SQLite quick-check diagnostics, crash backoff and dependency-aware rollback recovery. Manual Facebook login/CAPTCHA/2FA/checkpoints remain fail-safe and are never bypassed."
 }
