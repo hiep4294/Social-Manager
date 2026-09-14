@@ -1,8 +1,8 @@
 {
   "name": "social-manager",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "private": true,
-  "description": "Social Manager V1.7 with hardened Facebook operator queue, replay protection, watchdog auto-start, stable updates, heartbeat recovery and backups",
+  "description": "Social Manager V1.7.1 with hardened Facebook operator queue, replay protection, watchdog auto-start, stable updates, heartbeat recovery, backups and safer Windows Task Scheduler reuse",
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
