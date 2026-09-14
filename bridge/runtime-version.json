@@ -1,5 +1,5 @@
 {
-  "version": "1.7.1",
+  "version": "1.7.2",
   "channel": "main",
-  "notes": "Windows production Agent observed spawnSync npm.cmd EINVAL during self-update. Stable is being held on V1.7.0 until the bootstrap hotfix is released."
+  "notes": "V1.7.2 replaces direct npm.cmd spawning with Node npm-cli execution in the Windows Agent updater, avoids reinstalling dependencies for version-only package.json changes, and keeps the stable watchdog/autostart architecture."
 }
