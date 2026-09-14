@@ -1,8 +1,8 @@
 {
   "name": "social-manager",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "private": true,
-  "description": "Social Manager V1.9 with automatic 24-page food network creation, licensed dish images and daily Facebook Page publishing",
+  "description": "Social Manager V1.9.1 with automatic food network publishing, bounded self-healing, crash backoff and rollback recovery",
   "type": "module",
   "scripts": {
     "prestart": "node scripts/food-network-plan.mjs",
