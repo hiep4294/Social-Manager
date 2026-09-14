@@ -136,7 +136,6 @@ function supervisorChanged(files) {
   return files.some(file => [
     'scripts/start-facebook-operator-agent.mjs',
     'scripts/restart-facebook-operator-agent.mjs',
-    'scripts/facebook-operator-agent-watchdog.mjs',
     'src/windows-agent-autostart.js'
   ].includes(file));
 }
@@ -242,7 +241,7 @@ async function checkForUpdate({ startup = false } = {}) {
 
     const fetchResult = git(['fetch', '--quiet', 'origin', updateBranch], { allowFailure: true });
     if (fetchResult.status !== 0) {
-      logSkipOnce(`chưa kiểm tra được kênh ${updateBranch}: ${fetchResult.stderr || fetchResult.stdout || 'git fetch lỗi'}`);
+      logSkipOnce(`chưa kiểm tra được bản mới: ${fetchResult.stderr || fetchResult.stdout || 'git fetch lỗi'}`);
       return false;
     }
 
@@ -354,7 +353,7 @@ console.log('Update policy: trusted repo + stable channel + clean source + khôn
 if (process.platform === 'win32' && autoStartEnabled) {
   try {
     const result = installWindowsAgentAutostart({ root, nodePath: process.execPath });
-    log(`Windows auto-start đã sẵn sàng mode=${result.mode}; log nền: ${result.log_path}`);
+    log(`Windows auto-start đã sẵn sàng mode=${result.mode}${result.task_existing ? ' (reused existing task)' : ''}; log nền: ${result.log_path}`);
     if (result.task_error) log(`Task Scheduler fallback: ${result.task_error}`);
   } catch (error) {
     log(`không cài được Windows auto-start: ${String(error?.message || error)}`);
