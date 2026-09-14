@@ -14,12 +14,30 @@ const dbFile = process.env.SOCIAL_MANAGER_DB || path.join(root, 'data', 'social-
 const branch = String(process.env.FB_AGENT_UPDATE_BRANCH || 'stable');
 const intervalMs = Math.max(30000, Number(process.env.FB_AGENT_AUTO_UPDATE_MS || 60000));
 const watchdogManaged = String(process.env.FB_AGENT_WATCHDOG_CHILD || '').toLowerCase() === 'true';
+const publicDir = path.join(root, 'public');
+const supervisorStatusPath = path.join(publicDir, 'supervisor-health.json');
+fs.mkdirSync(publicDir, { recursive: true });
+
 let runtime = null;
+let runtimeStartedAt = 0;
+let crashTimes = [];
 let busy = false;
 let stopping = false;
 
-function log(text) {
-  console.log(`Agent supervisor: ${text}`);
+function nowIso() { return new Date().toISOString(); }
+function log(text) { console.log(`Agent supervisor: ${text}`); }
+function writeSupervisorStatus(extra = {}) {
+  try {
+    fs.writeFileSync(supervisorStatusPath, JSON.stringify({
+      online: true,
+      update_branch: branch,
+      watchdog_managed: watchdogManaged,
+      runtime_pid: runtime?.pid || null,
+      crash_count_10m: crashTimes.length,
+      ...extra,
+      updated_at: nowIso()
+    }, null, 2), 'utf8');
+  } catch {}
 }
 
 function run(command, args, allowFailure = false) {
@@ -61,13 +79,30 @@ function processingCount() {
   } catch { return 0; }
 }
 
+function runtimeRestartDelay(lifetimeMs) {
+  const now = Date.now();
+  if (lifetimeMs >= 10 * 60 * 1000) crashTimes = [];
+  crashTimes = crashTimes.filter(t => now - t < 10 * 60 * 1000);
+  crashTimes.push(now);
+  const delays = [5000, 10000, 20000, 40000, 120000, 300000];
+  return delays[Math.min(crashTimes.length - 1, delays.length - 1)];
+}
+
 function startRuntime() {
   if (runtime || stopping) return;
+  runtimeStartedAt = Date.now();
   runtime = spawn(process.execPath, [runtimeFile], { cwd: root, env: process.env, stdio: 'inherit', windowsHide: false });
   log(`runtime started pid=${runtime.pid}`);
-  runtime.once('exit', () => {
-    runtime = null;
-    if (!stopping && !busy) setTimeout(startRuntime, 5000);
+  writeSupervisorStatus({ status: 'RUNTIME_STARTED' });
+  const child = runtime;
+  child.once('exit', (code, signal) => {
+    const lifetime = Date.now() - runtimeStartedAt;
+    if (runtime === child) runtime = null;
+    if (stopping || busy) return;
+    const delay = runtimeRestartDelay(lifetime);
+    log(`runtime stopped code=${code ?? 'null'} signal=${signal || 'none'}; restart in ${Math.round(delay / 1000)}s`);
+    writeSupervisorStatus({ status: 'RUNTIME_RESTART_WAIT', last_exit: { code, signal, lifetime_ms: lifetime }, restart_delay_ms: delay });
+    setTimeout(startRuntime, delay);
   });
 }
 
@@ -83,7 +118,7 @@ async function stopRuntime() {
 }
 
 function dependenciesChanged(oldHead, newHead) {
-  const names = git(['diff', '--name-only', oldHead, newHead]).stdout.split(/\r?\n/);
+  const names = git(['diff', '--name-only', oldHead, newHead]).stdout.split(/\r?\n/).filter(Boolean);
   if (names.includes('package-lock.json') || names.includes('npm-shrinkwrap.json')) return true;
   if (!names.includes('package.json')) return false;
   try {
@@ -92,6 +127,12 @@ function dependenciesChanged(oldHead, newHead) {
     return ['dependencies','devDependencies','optionalDependencies','peerDependencies']
       .some(k => JSON.stringify(before[k] || {}) !== JSON.stringify(after[k] || {}));
   } catch { return true; }
+}
+
+function installDependencies() {
+  npm(fs.existsSync(path.join(root, 'package-lock.json'))
+    ? ['ci','--no-audit','--no-fund']
+    : ['install','--no-audit','--no-fund']);
 }
 
 async function checkUpdate() {
@@ -110,17 +151,29 @@ async function checkUpdate() {
     if (git(['merge-base', '--is-ancestor', oldHead, newHead], true).status !== 0) return;
     deps = dependenciesChanged(oldHead, newHead);
     log(`phát hiện bản mới ${oldHead.slice(0,7)} -> ${newHead.slice(0,7)}`);
+    writeSupervisorStatus({ status: 'UPDATING', old_head: oldHead.slice(0, 12), new_head: newHead.slice(0, 12) });
     await stopRuntime();
     git(['merge', '--ff-only', `origin/${branch}`]);
-    if (deps) npm(fs.existsSync(path.join(root, 'package-lock.json')) ? ['ci','--no-audit','--no-fund'] : ['install','--no-audit','--no-fund']);
+    if (deps) installDependencies();
     npm(['test']);
     log(`cập nhật thành công ${newHead.slice(0,7)}`);
+    writeSupervisorStatus({ status: 'UPDATE_OK', git_head: newHead.slice(0, 12) });
     stopping = true;
     process.exit(0);
   } catch (error) {
     log(`cập nhật lỗi: ${String(error?.message || error)}`);
+    writeSupervisorStatus({ status: 'UPDATE_FAILED', error: String(error?.message || error) });
     if (oldHead) {
-      try { git(['reset', '--hard', oldHead]); } catch {}
+      try {
+        git(['reset', '--hard', oldHead]);
+        if (deps) installDependencies();
+        npm(['test']);
+        log(`rollback OK về ${oldHead.slice(0,7)}`);
+        writeSupervisorStatus({ status: 'ROLLBACK_OK', git_head: oldHead.slice(0, 12) });
+      } catch (rollbackError) {
+        log(`rollback lỗi: ${String(rollbackError?.message || rollbackError)}`);
+        writeSupervisorStatus({ status: 'ROLLBACK_FAILED', error: String(rollbackError?.message || rollbackError) });
+      }
     }
   } finally {
     busy = false;
@@ -138,6 +191,7 @@ if (process.platform === 'win32') {
     log(`Windows auto-start sẵn sàng mode=${r.mode}${r.task_existing ? ' (reused existing task)' : ''}`);
   } catch (error) { log(`Windows auto-start lỗi: ${String(error?.message || error)}`); }
 }
+writeSupervisorStatus({ status: 'STARTING' });
 startRuntime();
 setTimeout(checkUpdate, 1500);
 setInterval(checkUpdate, intervalMs);
