@@ -28,15 +28,22 @@ process.env.GROUP_MONITOR_ENABLED ||= 'true';
 process.env.GROUP_MONITOR_SCHEDULER_MS ||= '60000';
 process.env.GROUP_MONITOR_MAX_REPLIES_PER_SCAN ||= '2';
 process.env.GROUP_MONITOR_REPLY_DELAY_MS ||= '8000';
+process.env.FOOD_NETWORK_AUTO_ENABLED ||= 'true';
+process.env.FOOD_NETWORK_TICK_MS ||= '60000';
+process.env.FOOD_NETWORK_POST_WINDOW_START_MINUTE ||= '660';
+process.env.FOOD_NETWORK_POST_WINDOW_MINUTES ||= '540';
+process.env.FOOD_NETWORK_PAGE_CATEGORY ||= 'Food & beverage';
 
 console.log(`Social Manager Facebook Operator Agent V${version}`);
 console.log('Browser mode: persistent local Chrome profile');
 console.log('Command queue: replay protection + expiry + known-Group guard + rate limit.');
 console.log('Reliability: heartbeat + stale-job recovery + SQLite backup.');
 console.log('Group Monitor: ON (mặc định 10 phút, tối thiểu 5 phút, rate limit + chống trùng + chặn nội dung rủi ro).');
+console.log('Food Network: AUTO 24 Pages/năm, 2 Page/tháng, 1 bài/ngày/Page, ảnh món ăn có giấy phép từ Wikimedia Commons.');
 console.log('Login/CAPTCHA/2FA/checkpoint: luôn yêu cầu người dùng xử lý, không bypass.');
 
 await import('../src/operator-command-poller.js');
 await import('../src/operator-reliability-worker.js');
 await import('../src/group-monitor-scheduler.js');
 await import('../src/facebook-operator-worker.js');
+await import('../src/food-network-worker.js');
