@@ -27,6 +27,7 @@ jobs:
       - run: node --check src/facebook-page-post-action.js
       - run: node --check src/operator-command-poller.js
       - run: node --check src/operator-reliability-worker.js
+      - run: node --check src/operator-self-healing-worker.js
       - run: node --check src/group-monitor-core.js
       - run: node --check src/group-monitor-scheduler.js
       - run: node --check src/windows-agent-autostart.js
