@@ -1,0 +1,52 @@
+name: Apply Food Auto Patch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - automation-patches/enable-food-auto.flag
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Add Page post action to operator worker
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const file = 'src/facebook-operator-worker.js';
+          let s = fs.readFileSync(file, 'utf8');
+          const importMarker = "import { ensureOperatorSchema } from './facebook-operator-core.js';";
+          const importLine = "import { executePostPage } from './facebook-page-post-action.js';";
+          if (!s.includes(importLine)) {
+            if (!s.includes(importMarker)) throw new Error('operator import marker missing');
+            s = s.replace(importMarker, `${importMarker}\n${importLine}`);
+          }
+          const caseMarker = "    case 'create_page': return executeCreatePage(page, payload, db, job.brand_id);";
+          const caseLine = "    case 'post_page': return executePostPage(page, payload, db);";
+          if (!s.includes(caseLine)) {
+            if (!s.includes(caseMarker)) throw new Error('operator dispatch marker missing');
+            s = s.replace(caseMarker, `${caseMarker}\n${caseLine}`);
+          }
+          fs.writeFileSync(file, s, 'utf8');
+          NODE
+      - name: Commit patch
+        run: |
+          if git diff --quiet -- src/facebook-operator-worker.js; then
+            echo "Patch already applied"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/facebook-operator-worker.js
+          git commit -m "Enable Facebook Page posting for Food Network automation"
+          git push origin HEAD:main
