@@ -1,8 +1,8 @@
 {
   "name": "social-manager",
-  "version": "1.7.2",
+  "version": "1.8.0",
   "private": true,
-  "description": "Social Manager V1.7.2 with hardened Facebook operator queue, replay protection, watchdog auto-start, stable updates, heartbeat recovery, backups and robust Windows npm self-update",
+  "description": "Social Manager V1.8 with Facebook operator reliability plus a 24-page food content planning system",
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
@@ -15,6 +15,7 @@
     "operator:autostart:install": "node scripts/manage-facebook-operator-autostart.mjs install",
     "operator:autostart:status": "node scripts/manage-facebook-operator-autostart.mjs status",
     "operator:autostart:remove": "node scripts/manage-facebook-operator-autostart.mjs remove",
+    "food:plan": "node scripts/food-network-plan.mjs",
     "test:facebook": "node tests/facebook.test.mjs",
     "test:engagement": "node tests/facebook-engagement.test.mjs",
     "test:operator": "node tests/facebook-operator-core.test.mjs",
@@ -24,8 +25,9 @@
     "test:bridge": "node tests/github-bridge.test.mjs",
     "test:image": "node tests/social-image.test.mjs",
     "test:auto": "node tests/runtime-auto-update.test.mjs",
+    "test:food": "node tests/food-network.test.mjs",
     "test:smoke": "node scripts/smoke-test.mjs",
-    "test": "npm run test:facebook && npm run test:engagement && npm run test:operator && npm run test:group-monitor && npm run test:meta && npm run test:mcp && npm run test:bridge && npm run test:image && npm run test:auto && npm run test:smoke"
+    "test": "npm run test:facebook && npm run test:engagement && npm run test:operator && npm run test:group-monitor && npm run test:meta && npm run test:mcp && npm run test:bridge && npm run test:image && npm run test:auto && npm run test:food && npm run test:smoke"
   },
   "dependencies": {
     "@modelcontextprotocol/node": "^2.0.0",
