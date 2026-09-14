@@ -1,5 +1,5 @@
 {
-  "version": "1.7.0",
+  "version": "1.7.1",
   "channel": "main",
-  "notes": "V1.7 adds expiring multi-command operator queue, replay protection, known-Group guard, action rate limits, stale-job recovery, heartbeat, rolling SQLite backup, watchdog auto-start and stable Agent updates."
+  "notes": "Windows auto-start now reuses an existing scheduled task and avoids creating a duplicate Registry startup entry."
 }
