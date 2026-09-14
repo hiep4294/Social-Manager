@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Social Manager</title>
+<style>
+body{font:14px Arial,sans-serif;margin:0;width:340px;background:#f6f7f9;color:#202124}main{padding:14px}.card{background:#fff;border:1px solid #ddd;border-radius:10px;padding:12px;margin-bottom:10px}.row{display:flex;gap:8px;align-items:center}.grow{flex:1}.label{font-size:12px;color:#666}.value{font-weight:700;margin-top:3px;word-break:break-word}.ok{color:#137333}.warn{color:#b06000}.bad{color:#b3261e}input{width:100%;box-sizing:border-box;padding:8px;border:1px solid #bbb;border-radius:7px}button{padding:8px 10px;border:0;border-radius:7px;background:#1a73e8;color:#fff;cursor:pointer}button.secondary{background:#5f6368}pre{white-space:pre-wrap;word-break:break-word;font-size:11px;background:#f8f9fa;padding:8px;border-radius:6px;max-height:120px;overflow:auto}</style>
+</head>
+<body><main>
+<div class="card"><div class="label">Trạng thái</div><div id="status" class="value">Đang kiểm tra...</div><div id="detail" class="label"></div></div>
+<div class="card" id="pairCard"><div class="label">Mã ghép đôi từ log Agent</div><div class="row" style="margin-top:7px"><input id="code" class="grow" placeholder="6 chữ số"><button id="pair">Ghép</button></div></div>
+<div class="card"><div class="row"><button id="refresh" class="secondary">Kiểm tra</button><button id="poll">Nhận lệnh ngay</button></div></div>
+<div class="card"><div class="label">Lệnh gần nhất</div><pre id="last">Chưa có</pre></div>
+<script src="popup.js"></script>
+</main></body>
+</html>

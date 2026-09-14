@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Social Manager Facebook Operator",
+  "version": "2.0.0",
+  "description": "Chrome operator for Social Manager. Uses the existing logged-in Facebook session and a localhost bridge.",
+  "permissions": ["storage", "tabs", "alarms"],
+  "host_permissions": [
+    "http://127.0.0.1:3210/*",
+    "https://www.facebook.com/*",
+    "https://facebook.com/*",
+    "https://web.facebook.com/*",
+    "https://upload.wikimedia.org/*",
+    "https://commons.wikimedia.org/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.facebook.com/*",
+        "https://facebook.com/*",
+        "https://web.facebook.com/*"
+      ],
+      "js": ["content-facebook.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Social Manager"
+  }
+}

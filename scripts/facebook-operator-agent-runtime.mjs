@@ -13,6 +13,7 @@ try {
 
 process.env.FB_OPERATOR_ENABLED = 'true';
 process.env.FB_OPERATOR_HEADLESS ||= 'false';
+process.env.FB_OPERATOR_POLL_MS ||= '30000';
 process.env.FB_OPERATOR_COMMAND_POLL_ENABLED = 'true';
 process.env.FB_OPERATOR_COMMAND_POLL_MS ||= '5000';
 process.env.FB_OPERATOR_COMMAND_QUEUE_URL ||= 'https://raw.githubusercontent.com/hiep4294/Social-Manager/main/bridge/operator-queue.json';
@@ -30,6 +31,11 @@ process.env.OPERATOR_SELF_HEALING_MAX_ATTEMPTS ||= '3';
 process.env.OPERATOR_SELF_HEALING_BASE_DELAY_MS ||= '60000';
 process.env.OPERATOR_SELF_HEALING_MAX_DELAY_MS ||= String(30 * 60 * 1000);
 process.env.OPERATOR_TEMP_MAX_AGE_MS ||= String(6 * 60 * 60 * 1000);
+process.env.CHROME_EXTENSION_BRIDGE_ENABLED ||= 'true';
+process.env.CHROME_EXTENSION_BRIDGE_HOST ||= '127.0.0.1';
+process.env.CHROME_EXTENSION_BRIDGE_PORT ||= '3210';
+process.env.CHROME_EXTENSION_HEARTBEAT_TTL_MS ||= '45000';
+process.env.CHROME_EXTENSION_RESERVATION_TTL_MS ||= '60000';
 process.env.GROUP_MONITOR_ENABLED ||= 'true';
 process.env.GROUP_MONITOR_SCHEDULER_MS ||= '60000';
 process.env.GROUP_MONITOR_MAX_REPLIES_PER_SCAN ||= '2';
@@ -41,7 +47,7 @@ process.env.FOOD_NETWORK_POST_WINDOW_MINUTES ||= '540';
 process.env.FOOD_NETWORK_PAGE_CATEGORY ||= 'Food & beverage';
 
 console.log(`Social Manager Facebook Operator Agent V${version}`);
-console.log('Browser mode: persistent local Chrome profile');
+console.log('Operator mode: Chrome Extension PRIMARY, Playwright FALLBACK.');
 console.log('Command queue: replay protection + expiry + known-Group guard + rate limit.');
 console.log('Reliability: heartbeat + stale-job recovery + SQLite backup.');
 console.log('Self-healing: bounded transient retry + state repair + diagnostics + temp cleanup.');
@@ -52,6 +58,7 @@ console.log('Login/CAPTCHA/2FA/checkpoint: luôn yêu cầu người dùng xử 
 await import('../src/operator-command-poller.js');
 await import('../src/operator-reliability-worker.js');
 await import('../src/operator-self-healing-worker.js');
+await import('../src/chrome-extension-bridge.js');
 await import('../src/group-monitor-scheduler.js');
 await import('../src/facebook-operator-worker.js');
 await import('../src/food-network-worker.js');
