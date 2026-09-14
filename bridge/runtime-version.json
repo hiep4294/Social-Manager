@@ -1,5 +1,5 @@
 {
-  "version": "1.7.2",
+  "version": "1.8.0",
   "channel": "main",
-  "notes": "V1.7.2 replaces direct npm.cmd spawning with Node npm-cli execution in the Windows Agent updater, avoids reinstalling dependencies for version-only package.json changes, and keeps the stable watchdog/autostart architecture."
+  "notes": "V1.8 adds a 24-page food-content network plan, 365-day calendar, recipe rotation without same-day duplication, per-page voice/theme, image prompts, dashboard and CI coverage. Real Page creation and publishing remain approval-gated until the Page and dish-image workflow is connected."
 }
