@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { chromium } from 'playwright-core';
 import { ensureOperatorSchema } from './facebook-operator-core.js';
+import { executePostPage } from './facebook-page-post-action.js';
 import {
   canAutoReply,
   classifyGroupItemRisk,
@@ -548,6 +549,7 @@ async function executeJob(page, job, db) {
   const payload = JSON.parse(job.payload_json || '{}');
   switch (job.action) {
     case 'create_page': return executeCreatePage(page, payload, db, job.brand_id);
+    case 'post_page': return executePostPage(page, payload, db);
     case 'create_group': return executeCreateGroup(page, payload, db, job.brand_id);
     case 'join_group': return executeJoinGroup(page, payload, db, job.brand_id);
     case 'post_group': return executePostGroup(page, payload, db);
