@@ -1,5 +1,5 @@
 {
   "version": "1.7.1",
   "channel": "main",
-  "notes": "Windows auto-start now reuses an existing scheduled task and avoids creating a duplicate Registry startup entry."
+  "notes": "Windows production Agent observed spawnSync npm.cmd EINVAL during self-update. Stable is being held on V1.7.0 until the bootstrap hotfix is released."
 }
