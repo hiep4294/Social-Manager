@@ -35,6 +35,7 @@ jobs:
       - run: node --check scripts/start-demo.mjs
       - run: node --check scripts/start-codespace.mjs
       - run: node --check scripts/start-facebook-operator-agent.mjs
+      - run: node --check scripts/facebook-operator-supervisor-safe.mjs
       - run: node --check scripts/facebook-operator-agent-runtime.mjs
       - run: node --check scripts/facebook-operator-agent-watchdog.mjs
       - run: node --check scripts/restart-facebook-operator-agent.mjs
