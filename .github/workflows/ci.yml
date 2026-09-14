@@ -23,6 +23,8 @@ jobs:
       - run: node --check src/page-auto-reply-worker.js
       - run: node --check src/facebook-operator-core.js
       - run: node --check src/facebook-operator-worker.js
+      - run: node --check src/facebook-operator-worker-legacy.js
+      - run: node --check src/facebook-page-post-action.js
       - run: node --check src/operator-command-poller.js
       - run: node --check src/operator-reliability-worker.js
       - run: node --check src/group-monitor-core.js
@@ -33,6 +35,7 @@ jobs:
       - run: node --check src/social-image.js
       - run: node --check src/runtime-auto-update.js
       - run: node --check src/food-network-core.js
+      - run: node --check src/food-network-worker.js
       - run: node --check scripts/start-demo.mjs
       - run: node --check scripts/start-codespace.mjs
       - run: node --check scripts/start-facebook-operator-agent.mjs
