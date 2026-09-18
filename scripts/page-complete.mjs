@@ -214,7 +214,7 @@ try {
   const name = profileSwitch.page_name || inferredName || h1Name || clean(title.replace(/\s*[|·-]\s*Facebook\s*$/i,'')) || 'Bếp ngon mỗi ngày';
   result.inspect = {url:resolved,title,page_name:name,text:body0};
 
-  const bio = `${name} – công thức dễ làm, món ngon mỗi ngày và mẹo bếp thực tế. Theo dõi trang để mỗi ngày có thêm một gợi ý cho bữa ăn.`;
+  const bio = 'Món ngon mỗi ngày • Công thức dễ làm • Mẹo bếp thực tế cho gia đình.';
 
   // Facebook current Page UI: "Chỉnh sửa" is a link that navigates to the About/Profile editor.
   let opened = await clickFirst(page,[
@@ -228,19 +228,25 @@ try {
     result.edit.opened=true;
     result.edit.edit_url=page.url();
 
-    // On the edit page, the bio is a section row, not an immediately editable textarea.
-    const currentBio='Gợi ý món mỗi ngày';
-    const bioClick=await clickNearbyEdit(page,['Tiểu sử',currentBio],2600);
-    result.edit.bio_click=bioClick;
+    // Exact selector confirmed by live DOM probe: role=button, aria-label="Chỉnh sửa tiểu sử".
+    const bioButton=page.getByRole('button',{name:/^chỉnh sửa tiểu sử$|^edit bio$/i}).first();
+    const bioVisible=await bioButton.isVisible({timeout:2500}).catch(()=>false);
+    result.edit.bio_click={ok:bioVisible,selector:'role=button aria=Chỉnh sửa tiểu sử'};
 
-    if(bioClick.ok){
+    if(bioVisible){
+      await bioButton.click({timeout:3000});
       await sleep(900);
+      result.edit.bio_controls_before_fill=await visibleControls(page,30);
       if(await fillOpenEditor(page,bio)){
         const saved=await saveOpenEditor(page);
         if(saved){
           result.edit.changed.push('bio');
-          await sleep(1000);
+          await sleep(1200);
+        } else {
+          result.edit.bio_save='NOT_FOUND';
         }
+      } else {
+        result.edit.bio_editor='NOT_FOUND';
       }
     }
 
@@ -275,10 +281,10 @@ try {
     result.post.status='ALREADY_EXISTS';
   } else {
     let openedPost = await clickFirst(page,[
+      p=>p.getByRole('button',{name:/^bạn đang nghĩ gì\?$|^what.?s on your mind\??$/i}),
+      '[role="button"]:has-text("Bạn đang nghĩ gì?")',
       '[role="button"]:has-text("Chia sẻ suy nghĩ")',
-      '[role="button"]:has-text("Bạn đang nghĩ gì")',
-      '[role="button"]:has-text("Tạo bài viết")',
-      p=>p.getByRole('button',{name:/create a post|tạo bài viết|what.?s on your mind|bạn đang nghĩ gì|chia sẻ suy nghĩ/i})
+      '[role="button"]:has-text("Tạo bài viết")'
     ],3500);
     if(!openedPost) openedPost=await clickTextOrAncestor(page,/chia sẻ suy nghĩ|bạn đang nghĩ gì|create a post|what.?s on your mind/i,3000);
     result.post.opened=openedPost;
@@ -306,9 +312,11 @@ try {
           '[role="dialog"] button:has-text("Đăng")'
         ],4500);
         if (posted) {
-          await sleep(3500);
+          await sleep(4200);
           await checkpoint(page);
-          result.post.status='DONE';
+          const verifyText=clean(await page.locator('body').innerText().catch(()=>'' ));
+          result.post.verified=verifyText.includes('Trang chia sẻ công thức dễ làm');
+          result.post.status=result.post.verified ? 'DONE' : 'NEEDS_REVIEW';
         } else {
           result.post.status='NEEDS_REVIEW';
           result.post.controls=await visibleControls(page,40);
