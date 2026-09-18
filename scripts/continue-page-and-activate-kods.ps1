@@ -1,5 +1,6 @@
-$ErrorActionPreference = 'Continue'
 param([string]$PageUrl='https://www.facebook.com/share/18LofHUx56/?mibextid=wwXIfr')
+
+$ErrorActionPreference = 'Continue'
 
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
