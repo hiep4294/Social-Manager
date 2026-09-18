@@ -9,9 +9,19 @@ if (!target) throw new Error('Usage: node scripts/page-complete.mjs <facebook-pa
 function clean(s){ return String(s||'').replace(/\s+/g,' ').trim(); }
 async function checkpoint(page){
   const url = page.url().toLowerCase();
-  const body = (await page.locator('body').innerText().catch(()=>'' )).toLowerCase();
-  if (/\/login|\/checkpoint|\/two_factor/.test(url) || /captcha|security check|xác minh|mã xác nhận|two-factor/.test(body)) {
-    const e = new Error('Facebook yêu cầu đăng nhập/xác minh'); e.code='WAITING_USER'; throw e;
+  const cookies = await page.context().cookies('https://www.facebook.com/').catch(()=>[]);
+  const hasUserCookie = cookies.some(x => x.name === 'c_user' && String(x.value || '').trim());
+  if (/\/checkpoint|\/two_factor/.test(url)) {
+    const e = new Error('Facebook yêu cầu checkpoint/2FA tại ' + page.url()); e.code='WAITING_USER'; throw e;
+  }
+  if (/\/login/.test(url) && !hasUserCookie) {
+    const e = new Error('Facebook yêu cầu đăng nhập tại ' + page.url()); e.code='WAITING_USER'; throw e;
+  }
+  if (!hasUserCookie) {
+    const visibleSecurity = await page.locator('input[name="email"],input[name="pass"],iframe[src*="captcha"],[data-testid*="captcha"]').filter({visible:true}).count().catch(()=>0);
+    if (visibleSecurity) {
+      const e = new Error('Facebook chưa có phiên đăng nhập hợp lệ'); e.code='WAITING_USER'; throw e;
+    }
   }
 }
 async function clickFirst(page, list, timeout=2500){
@@ -44,6 +54,7 @@ try {
   await page.goto(target,{waitUntil:'domcontentloaded',timeout:30000});
   await sleep(4500);
   await checkpoint(page);
+  console.log('PAGE_CHECKPOINT_OK url='+page.url());
 
   const resolved = page.url();
   const title = await page.title().catch(()=> '');
