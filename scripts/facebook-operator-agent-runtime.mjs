@@ -52,6 +52,7 @@ process.env.GROUP_MONITOR_MAX_REPLIES_PER_SCAN ||= '2';
 process.env.GROUP_MONITOR_REPLY_DELAY_MS ||= '8000';
 process.env.FOOD_NETWORK_AUTO_ENABLED ||= 'false';
 process.env.FOOD_NETWORK_TICK_MS ||= '60000';
+process.env.FOOD_NETWORK_CREATE_PAGES_ENABLED = 'false';
 process.env.FOOD_NETWORK_POST_WINDOW_START_MINUTE ||= '660';
 process.env.FOOD_NETWORK_POST_WINDOW_MINUTES ||= '540';
 process.env.FOOD_NETWORK_PAGE_CATEGORY ||= 'Food & beverage';
