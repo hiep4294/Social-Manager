@@ -63,24 +63,38 @@ export async function executePostPage(page, payload, db) {
   const target = resolvePageTarget(db, payload);
   await page.goto(target.url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
   await page.waitForLoadState('domcontentloaded', { timeout: 20_000 }).catch(() => {});
-  await page.waitForTimeout(1800);
+  await page.waitForTimeout(2200);
   await assertNoCheckpoint(page);
 
   const opened = await clickFirst(page, [
-    p => p.getByText(/create a post|tạo bài viết|what's on your mind|bạn đang nghĩ gì/i),
-    '[role="button"]:has-text("Create a post")',
-    '[role="button"]:has-text("Tạo bài viết")',
-    '[role="button"]:has-text("Bạn đang nghĩ gì")'
+    p => p.getByRole('button', { name: /^bạn đang nghĩ gì\?$|^what.?s on your mind\??$/i }),
+    '[role="button"]:has-text("Bạn đang nghĩ gì?")',
+    '[role="button"]:has-text("Chia sẻ suy nghĩ")',
+    '[role="button"]:has-text("Tạo bài viết")'
   ], 4500);
-  if (!opened) throw Object.assign(new Error('Không mở được hộp tạo bài trên Page; Facebook có thể đã đổi giao diện'), { code: 'NEEDS_REVIEW' });
-  await sleep(1000);
+  if (!opened) throw Object.assign(new Error('Không mở được hộp tạo bài trên Page'), { code: 'NEEDS_REVIEW' });
 
-  const filled = await fillFirst(page, [
-    p => p.getByRole('textbox', { name: /create a post|tạo bài viết|what's on your mind|bạn đang nghĩ gì/i }),
-    '[role="dialog"] [contenteditable="true"]',
-    '[contenteditable="true"]'
-  ], payload.message || '', 4000);
-  if (!filled && payload.message) throw Object.assign(new Error('Không tìm thấy vùng nhập nội dung bài Page'), { code: 'NEEDS_REVIEW' });
+  await sleep(1800);
+  let dialog = page.locator('[role="dialog"]').filter({ hasText: /Tạo bài viết|Create post/i }).last();
+  if (!(await dialog.isVisible({ timeout: 3000 }).catch(() => false))) dialog = page.locator('[role="dialog"]').last();
+
+  let editor = dialog.getByRole('textbox').last();
+  if (!(await editor.isVisible({ timeout: 2500 }).catch(() => false))) {
+    editor = dialog.locator('[contenteditable="true"],textarea').last();
+  }
+  if (!(await editor.isVisible({ timeout: 2500 }).catch(() => false))) {
+    throw Object.assign(new Error('Không tìm thấy vùng nhập nội dung bài Page'), { code: 'NEEDS_REVIEW' });
+  }
+
+  if (payload.message) {
+    await editor.click();
+    try {
+      await editor.fill(String(payload.message));
+    } catch {
+      await page.keyboard.press('Control+A').catch(() => {});
+      await page.keyboard.insertText(String(payload.message));
+    }
+  }
 
   let tempImage = null;
   try {
@@ -88,22 +102,67 @@ export async function executePostPage(page, payload, db) {
       const dataDir = path.resolve(process.cwd(), 'data');
       fs.mkdirSync(dataDir, { recursive: true });
       tempImage = await downloadImage(payload.image_url, dataDir);
-      let input = page.locator('[role="dialog"] input[type="file"][accept*="image" i]').last();
+
+      let input = dialog.locator('input[type="file"][accept*="image" i]').last();
       if (!(await input.count())) input = page.locator('input[type="file"][accept*="image" i]').last();
       if (!(await input.count())) input = page.locator('input[type="file"]').last();
       await input.setInputFiles(tempImage, { timeout: 7000 });
       await sleep(2200);
     }
 
-    const posted = await clickFirst(page, [
-      p => p.getByRole('button', { name: /^post$|^đăng$/i }),
-      '[role="dialog"] button:has-text("Post")',
-      '[role="dialog"] button:has-text("Đăng")'
-    ], 5000);
-    if (!posted) throw Object.assign(new Error('Không tìm thấy nút Đăng của Page'), { code: 'NEEDS_REVIEW' });
-    await sleep(3000);
+    // Current Facebook Page composer is commonly two-step: content -> Tiếp -> Đăng.
+    let next = dialog.getByRole('button', { name: /^(Tiếp|Next)$/i }).last();
+    if (!(await next.isVisible({ timeout: 2000 }).catch(() => false))) {
+      next = page.getByRole('button', { name: /^(Tiếp|Next)$/i }).last();
+    }
+    if (await next.isVisible({ timeout: 1500 }).catch(() => false)) {
+      for (let i = 0; i < 8; i += 1) {
+        if (await next.isEnabled().catch(() => false)) break;
+        await sleep(500);
+      }
+      if (!(await next.isEnabled().catch(() => false))) {
+        throw Object.assign(new Error('Nút Tiếp chưa khả dụng sau khi nhập nội dung'), { code: 'NEEDS_REVIEW' });
+      }
+      await next.click({ timeout: 4000 });
+      await sleep(2200);
+      dialog = page.locator('[role="dialog"]').last();
+    }
+
+    let postButton = dialog.getByRole('button', { name: /^(Đăng|Post)$/i }).last();
+    if (!(await postButton.isVisible({ timeout: 3000 }).catch(() => false))) {
+      postButton = page.getByRole('button', { name: /^(Đăng|Post)$/i }).last();
+    }
+    if (!(await postButton.isVisible({ timeout: 3000 }).catch(() => false)) ||
+        !(await postButton.isEnabled().catch(() => false))) {
+      throw Object.assign(new Error('Không tìm thấy nút Đăng khả dụng của Page'), { code: 'NEEDS_REVIEW' });
+    }
+
+    await postButton.click({ timeout: 4000 });
+    await sleep(5000);
     await assertNoCheckpoint(page);
-    return { ok: true, page_name: target.name || payload.page_name || '', page_url: target.url, current_url: page.url() };
+
+    // Require a real post-verification signal before reporting DONE.
+    await page.goto(target.url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    await sleep(3000);
+    const marker = String(payload.message || '').replace(/\s+/g, ' ').trim().slice(0, 42);
+    let verified = !marker;
+    for (const y of [0, 700, 1400, 2200]) {
+      await page.evaluate(v => window.scrollTo(0, v), y).catch(() => {});
+      await sleep(650);
+      const body = String(await page.locator('body').innerText().catch(() => '')).replace(/\s+/g, ' ');
+      if (marker && body.includes(marker)) { verified = true; break; }
+    }
+    if (!verified) {
+      throw Object.assign(new Error('Facebook đã nhận thao tác Đăng nhưng chưa xác minh thấy bài trên timeline'), { code: 'NEEDS_REVIEW' });
+    }
+
+    return {
+      ok: true,
+      verified: true,
+      page_name: target.name || payload.page_name || '',
+      page_url: target.url,
+      current_url: page.url()
+    };
   } finally {
     if (tempImage) { try { fs.unlinkSync(tempImage); } catch {} }
   }
