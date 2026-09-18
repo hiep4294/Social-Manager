@@ -121,12 +121,18 @@ function seedPages(db) {
   for (const page of foodPageBlueprints()) ins.run(page.slot, page.name, page.theme, page.voice, plannedCreateDate(startAt, page.slot), now, now);
 }
 
-function enqueueLocalPostPage(db, { id, pageName, pageUrl, message, imageUrl }) {
+function enqueueLocalPostPage(db, { id, pageName, pageUrl, message, imageUrl, dedupeMarker }) {
   const existing = db.prepare('SELECT * FROM facebook_operator_jobs WHERE id=?').get(id);
   if (existing) return existing;
   const now = nowIso();
   db.prepare(`INSERT INTO facebook_operator_jobs(id,brand_id,action,payload_json,status,attempts,created_at,updated_at) VALUES(?,NULL,'post_page',?,'QUEUED',0,?,?)`)
-    .run(id, JSON.stringify({ page_name: pageName, page_url: pageUrl, message, image_url: imageUrl }), now, now);
+    .run(id, JSON.stringify({
+      page_name: pageName,
+      page_url: pageUrl,
+      message,
+      image_url: imageUrl,
+      dedupe_marker: dedupeMarker || String(message || '').replace(/\s+/g, ' ').trim().slice(0, 72)
+    }), now, now);
   return db.prepare('SELECT * FROM facebook_operator_jobs WHERE id=?').get(id);
 }
 
@@ -215,7 +221,14 @@ async function planAndQueueDaily(db) {
       }
       const message = `${daily.content}\n\n${image.attribution}`;
       const jobId = `food-post-${date}-${String(page.slot).padStart(2,'0')}`;
-      enqueueLocalPostPage(db, { id: jobId, pageName: page.name, pageUrl: page.page_url, message, imageUrl: image.imageUrl });
+      enqueueLocalPostPage(db, {
+        id: jobId,
+        pageName: page.name,
+        pageUrl: page.page_url,
+        message,
+        imageUrl: image.imageUrl,
+        dedupeMarker: String(daily.content || '').replace(/\s+/g, ' ').trim().slice(0, 72)
+      });
       db.prepare("UPDATE food_network_daily SET image_url=?,image_source_url=?,image_attribution=?,post_job_id=?,status='POST_QUEUED',error=NULL,updated_at=? WHERE id=?")
         .run(image.imageUrl, image.sourceUrl || null, image.attribution, jobId, nowIso(), daily.id);
       console.log(`Food Network: queued daily post Page ${page.slot} - ${daily.recipe_title}`);
