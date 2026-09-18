@@ -12,8 +12,9 @@ try {
 } catch {}
 
 process.env.FB_OPERATOR_ENABLED = 'true';
-process.env.FB_OPERATOR_HEADLESS ||= 'false';
+process.env.FB_OPERATOR_HEADLESS ||= 'true';
 process.env.FB_OPERATOR_POLL_MS ||= '30000';
+process.env.FB_OPERATOR_PROFILE_DIR ||= path.join(root, 'data', 'facebook-browser-profile-bg');
 process.env.FB_OPERATOR_COMMAND_POLL_ENABLED = 'true';
 process.env.FB_OPERATOR_COMMAND_POLL_MS ||= '5000';
 process.env.FB_OPERATOR_COMMAND_QUEUE_URL ||= 'https://raw.githubusercontent.com/hiep4294/Social-Manager/main/bridge/operator-queue.json';
@@ -31,7 +32,7 @@ process.env.OPERATOR_SELF_HEALING_MAX_ATTEMPTS ||= '3';
 process.env.OPERATOR_SELF_HEALING_BASE_DELAY_MS ||= '60000';
 process.env.OPERATOR_SELF_HEALING_MAX_DELAY_MS ||= String(30 * 60 * 1000);
 process.env.OPERATOR_TEMP_MAX_AGE_MS ||= String(6 * 60 * 60 * 1000);
-process.env.CHROME_EXTENSION_BRIDGE_ENABLED ||= 'true';
+process.env.CHROME_EXTENSION_BRIDGE_ENABLED ||= 'false';
 process.env.CHROME_EXTENSION_BRIDGE_HOST ||= '127.0.0.1';
 process.env.CHROME_EXTENSION_BRIDGE_PORT ||= '3210';
 process.env.CHROME_EXTENSION_HEARTBEAT_TTL_MS ||= '45000';
@@ -40,19 +41,19 @@ process.env.GROUP_MONITOR_ENABLED ||= 'true';
 process.env.GROUP_MONITOR_SCHEDULER_MS ||= '60000';
 process.env.GROUP_MONITOR_MAX_REPLIES_PER_SCAN ||= '2';
 process.env.GROUP_MONITOR_REPLY_DELAY_MS ||= '8000';
-process.env.FOOD_NETWORK_AUTO_ENABLED ||= 'true';
+process.env.FOOD_NETWORK_AUTO_ENABLED ||= 'false';
 process.env.FOOD_NETWORK_TICK_MS ||= '60000';
 process.env.FOOD_NETWORK_POST_WINDOW_START_MINUTE ||= '660';
 process.env.FOOD_NETWORK_POST_WINDOW_MINUTES ||= '540';
 process.env.FOOD_NETWORK_PAGE_CATEGORY ||= 'Food & beverage';
 
 console.log(`Social Manager Facebook Operator Agent V${version}`);
-console.log('Operator mode: Chrome Extension PRIMARY, Playwright FALLBACK.');
+console.log('Operator mode: isolated headless Playwright profile (normal Chrome is not controlled).');
 console.log('Command queue: replay protection + expiry + known-Group guard + rate limit.');
 console.log('Reliability: heartbeat + stale-job recovery + SQLite backup.');
 console.log('Self-healing: bounded transient retry + state repair + diagnostics + temp cleanup.');
 console.log('Group Monitor: ON (mặc định 10 phút, tối thiểu 5 phút, rate limit + chống trùng + chặn nội dung rủi ro).');
-console.log('Food Network: AUTO 24 Pages/năm, 1 bài/ngày/Page, ảnh món ăn có giấy phép từ Wikimedia Commons.');
+console.log('Food Network: paused by default until the current Page is explicitly onboarded.');
 console.log('Login/CAPTCHA/2FA/checkpoint: luôn yêu cầu người dùng xử lý, không bypass.');
 
 await import('../src/operator-command-poller.js');
