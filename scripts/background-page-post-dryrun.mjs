@@ -52,6 +52,17 @@ async function imageFor(title){
 }
 
 try{
+  const cleanupAt=new Date().toISOString();
+  db.prepare(`
+    UPDATE facebook_operator_jobs
+    SET status='CANCELLED',
+        error='Superseded by newer background publishing dry-run',
+        locked_at=NULL,
+        updated_at=?
+    WHERE id LIKE 'bg-page-post-dryrun-%'
+      AND status IN ('WAITING_USER','NEEDS_REVIEW','FAILED','QUEUED','PROCESSING','EXTENSION_QUEUED')
+  `).run(cleanupAt);
+
   const page=db.prepare("SELECT slot,name,status,page_url FROM food_network_pages WHERE status='ACTIVE' ORDER BY slot LIMIT 1").get();
   if(!page) throw new Error('Không có Page ACTIVE');
 
