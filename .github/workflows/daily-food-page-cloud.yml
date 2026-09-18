@@ -21,7 +21,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: daily-food-page-cloud
@@ -56,6 +56,22 @@ jobs:
 
       - name: Generate branded image and publish
         run: node scripts/cloud-food-daily.mjs
+
+      - name: Persist recipe usage state
+        if: always()
+        shell: bash
+        run: |
+          set -e
+          git config user.name "social-manager-bot"
+          git config user.email "social-manager-bot@users.noreply.github.com"
+          git add content/hom-nay-an-gi-recipe-state.json content/hom-nay-an-gi-recipe-state.csv
+          if git diff --cached --quiet; then
+            echo "No recipe state changes."
+            exit 0
+          fi
+          git commit -m "Update Hôm Nay Ăn Gì recipe state"
+          git pull --rebase origin stable
+          git push origin HEAD:stable
 
       - name: Upload generated image and log
         if: always()
