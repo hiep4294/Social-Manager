@@ -26,7 +26,19 @@ function managedPageNameFromText(text){
 async function switchToManagedPage(page){
   const before=clean(await page.locator('body').innerText().catch(()=>'' ));
   const pageName=managedPageNameFromText(before);
-  if(!pageName) return {needed:false,switched:false,page_name:''};
+  const hasSwitchPrompt=/Chuyển sang Trang của|Switch into|Switch to/i.test(before);
+  const looksLikeActivePage=/Công cụ chuyên nghiệp|Professional dashboard/i.test(before)
+    && /Chỉnh sửa|Edit/i.test(before);
+
+  // If the Page management UI is already active, do not try to switch again.
+  if(!hasSwitchPrompt && looksLikeActivePage){
+    return {needed:false,switched:false,page_name:pageName||'',already_active:true};
+  }
+
+  // No explicit switch prompt means there is nothing to switch.
+  if(!hasSwitchPrompt){
+    return {needed:false,switched:false,page_name:pageName||'',already_active:false};
+  }
 
   const clicked=await clickFirst(page,[
     p=>p.getByRole('button',{name:/^chuyển ngay$|^switch now$|^switch$/i}),
