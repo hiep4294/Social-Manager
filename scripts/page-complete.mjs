@@ -18,7 +18,12 @@ async function checkpoint(page){
     const e = new Error('Facebook yêu cầu đăng nhập tại ' + page.url()); e.code='WAITING_USER'; throw e;
   }
   if (!hasUserCookie) {
-    const visibleSecurity = await page.locator('input[name="email"],input[name="pass"],iframe[src*="captcha"],[data-testid*="captcha"]').filter({visible:true}).count().catch(()=>0);
+    const probes = page.locator('input[name="email"],input[name="pass"],iframe[src*="captcha"],[data-testid*="captcha"]');
+    const n = await probes.count().catch(()=>0);
+    let visibleSecurity = false;
+    for (let i=0; i<n; i++) {
+      if (await probes.nth(i).isVisible().catch(()=>false)) { visibleSecurity = true; break; }
+    }
     if (visibleSecurity) {
       const e = new Error('Facebook chưa có phiên đăng nhập hợp lệ'); e.code='WAITING_USER'; throw e;
     }
