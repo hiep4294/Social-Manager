@@ -18,7 +18,7 @@ if (backgroundOnly) {
   process.env.CHROME_EXTENSION_BRIDGE_ENABLED = 'false';
 }
 const foodAutoMarker = path.join(root, 'data', 'food-network-auto.enabled');
-if (!fs.existsSync(foodAutoMarker)) process.env.FOOD_NETWORK_AUTO_ENABLED = 'false';
+process.env.FOOD_NETWORK_AUTO_ENABLED = fs.existsSync(foodAutoMarker) ? 'true' : 'false';
 
 process.env.FB_OPERATOR_ENABLED = 'true';
 process.env.FB_OPERATOR_HEADLESS ||= 'true';
