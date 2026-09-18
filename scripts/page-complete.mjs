@@ -7,6 +7,46 @@ const target = String(process.argv[2] || '').trim();
 if (!target) throw new Error('Usage: node scripts/page-complete.mjs <facebook-page-url>');
 
 function clean(s){ return String(s||'').replace(/\s+/g,' ').trim(); }
+
+function managedPageNameFromText(text){
+  const s=clean(text);
+  const patterns=[
+    /Chuyển sang Trang của (.+?) để /i,
+    /Switch into (.+?) to /i,
+    /Switch to (.+?) to /i
+  ];
+  for(const p of patterns){
+    const m=s.match(p);
+    if(m?.[1]) return clean(m[1]);
+  }
+  return '';
+}
+
+async function switchToManagedPage(page){
+  const before=clean(await page.locator('body').innerText().catch(()=>'' ));
+  const pageName=managedPageNameFromText(before);
+  if(!pageName) return {needed:false,switched:false,page_name:''};
+
+  const clicked=await clickFirst(page,[
+    p=>p.getByRole('button',{name:/^chuyển ngay$|^switch now$|^switch$/i}),
+    p=>p.getByText(/^chuyển ngay$|^switch now$|^switch$/i),
+    p=>p.getByText(/chuyển sang trang của|switch into|switch to/i)
+  ],4500);
+
+  if(!clicked) return {needed:true,switched:false,page_name:pageName,error:'Không tìm thấy nút Chuyển ngay'};
+
+  await sleep(1200);
+  await clickFirst(page,[
+    p=>p.getByRole('button',{name:/^chuyển$|^switch$|^tiếp tục$|^continue$/i}),
+    p=>p.getByText(/^chuyển$|^switch$|^tiếp tục$|^continue$/i)
+  ],1800);
+
+  await sleep(3500);
+  await checkpoint(page);
+  const after=clean(await page.locator('body').innerText().catch(()=>'' ));
+  const stillPrompt=/Chuyển sang Trang của|Switch into|Switch to/i.test(after);
+  return {needed:true,switched:!stillPrompt,page_name:pageName,error:stillPrompt?'Facebook vẫn đang yêu cầu chuyển sang Page':null};
+}
 async function checkpoint(page){
   const url = page.url().toLowerCase();
   const cookies = await page.context().cookies('https://www.facebook.com/').catch(()=>[]);
@@ -52,7 +92,7 @@ const ctx = await chromium.launchPersistentContext(profile,{
   executablePath:browser,headless:false,viewport:{width:1440,height:980},locale:'vi-VN'
 });
 
-const result = {target, inspect:null, edit:{status:'SKIPPED',changed:[]}, post:{status:'SKIPPED'}};
+const result = {target, page_profile:null, inspect:null, edit:{status:'SKIPPED',changed:[]}, post:{status:'SKIPPED'}};
 
 try {
   const page = ctx.pages()[0] || await ctx.newPage();
@@ -61,20 +101,51 @@ try {
   await checkpoint(page);
   console.log('PAGE_CHECKPOINT_OK url='+page.url());
 
+  const profileSwitch=await switchToManagedPage(page);
+  result.page_profile=profileSwitch;
+  console.log('PAGE_PROFILE='+JSON.stringify(profileSwitch));
+  if(profileSwitch.needed && !profileSwitch.switched){
+    const e=new Error(profileSwitch.error || 'Chưa chuyển được sang Page profile');
+    e.code='NEEDS_REVIEW';
+    throw e;
+  }
+
+  if(profileSwitch.switched){
+    await page.goto(target,{waitUntil:'domcontentloaded',timeout:30000});
+    await sleep(3500);
+    await checkpoint(page);
+  }
+
   const resolved = page.url();
   const title = await page.title().catch(()=> '');
   const h1 = (await page.locator('h1').allTextContents().catch(()=>[])).map(clean).filter(Boolean);
-  const name = h1[0] || clean(title.replace(/\s*[|·-]\s*Facebook\s*$/i,'')) || 'Bếp ngon mỗi ngày';
   const body0 = clean(await page.locator('body').innerText().catch(()=>'' )).slice(0,3500);
+  const generic=/^(quản lý trang|manage page|facebook)$/i;
+  const h1Name=h1.find(x=>!generic.test(x)) || '';
+  const name = profileSwitch.page_name || h1Name || clean(title.replace(/\s*[|·-]\s*Facebook\s*$/i,'')) || 'Bếp ngon mỗi ngày';
   result.inspect = {url:resolved,title,page_name:name,text:body0};
 
   const bio = `${name} – công thức dễ làm, món ngon mỗi ngày và mẹo bếp thực tế. Theo dõi trang để mỗi ngày có thêm một gợi ý cho bữa ăn.`;
 
-  const opened = await clickFirst(page,[
-    p=>p.getByRole('button',{name:/edit page details|edit details|chỉnh sửa chi tiết trang|chỉnh sửa thông tin/i}),
-    p=>p.getByText(/edit page details|edit details|chỉnh sửa chi tiết trang|chỉnh sửa thông tin/i),
-    'a[href*="about"]'
-  ],4000);
+  let opened = await clickFirst(page,[
+    p=>p.getByRole('button',{name:/edit page details|edit details|chỉnh sửa chi tiết trang|chỉnh sửa thông tin|chỉnh sửa thông tin trang/i}),
+    p=>p.getByText(/edit page details|edit details|chỉnh sửa chi tiết trang|chỉnh sửa thông tin|chỉnh sửa thông tin trang/i)
+  ],3500);
+
+  if(!opened){
+    const details=await clickFirst(page,[
+      p=>p.getByText(/^thông tin chi tiết$|^details$|^page details$/i),
+      p=>p.getByRole('link',{name:/thông tin chi tiết|details|page details/i}),
+      'a[href*="about"]'
+    ],3000);
+    if(details){
+      await sleep(1500);
+      opened=await clickFirst(page,[
+        p=>p.getByRole('button',{name:/edit|chỉnh sửa/i}),
+        p=>p.getByText(/chỉnh sửa thông tin|edit details|edit page details/i)
+      ],3000);
+    }
+  }
 
   if (opened) {
     await sleep(1200);
@@ -142,6 +213,9 @@ try {
   }
 
   console.log('PAGE_COMPLETE_RESULT='+JSON.stringify(result));
+  const okEdit=result.edit.status==='DONE';
+  const okPost=['DONE','ALREADY_EXISTS'].includes(result.post.status);
+  if(!okEdit || !okPost) process.exitCode=4;
 } finally {
   await ctx.close();
 }
