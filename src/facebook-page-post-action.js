@@ -32,10 +32,24 @@ async function fillFirst(page, selectors, value, timeout = 3500) {
 }
 
 async function assertNoCheckpoint(page) {
-  const url = page.url();
-  const body = (await page.locator('body').innerText().catch(() => '')).toLowerCase();
-  if (/\/login|\/checkpoint|\/two_factor/.test(url) || /captcha|security check|xác minh|mã xác nhận|two-factor|checkpoint/.test(body)) {
-    throw Object.assign(new Error('Facebook yêu cầu đăng nhập/xác minh trước khi đăng Page'), { code: 'WAITING_USER' });
+  const url = String(page.url() || '').toLowerCase();
+  if (/\/login(?:\/|\?|$)|\/checkpoint(?:\/|\?|$)|\/two_factor(?:\/|\?|$)|\/recover\//.test(url)) {
+    throw Object.assign(new Error('Facebook yêu cầu đăng nhập/xác minh trước khi đăng Page (URL challenge)'), { code: 'WAITING_USER' });
+  }
+
+  const passwordVisible = await page.locator('input[type="password"]').first()
+    .isVisible({ timeout: 500 }).catch(() => false);
+  const loginEmailVisible = await page.locator('input[name="email"],input[name="pass"]').first()
+    .isVisible({ timeout: 500 }).catch(() => false);
+  if (passwordVisible || loginEmailVisible) {
+    throw Object.assign(new Error('Facebook yêu cầu đăng nhập trước khi đăng Page'), { code: 'WAITING_USER' });
+  }
+
+  const challenge = page.locator('[role="dialog"],main').filter({
+    hasText: /security check|two[- ]factor|enter.*code|authentication code|xác minh danh tính|nhập mã xác nhận|mã xác thực|captcha/i
+  }).first();
+  if (await challenge.isVisible({ timeout: 700 }).catch(() => false)) {
+    throw Object.assign(new Error('Facebook yêu cầu xác minh bảo mật trước khi đăng Page'), { code: 'WAITING_USER' });
   }
 }
 
