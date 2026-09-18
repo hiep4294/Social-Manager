@@ -291,39 +291,69 @@ try {
 
     if (!openedPost) result.post.status='NEEDS_REVIEW';
     else {
-      await sleep(900);
-      const dialog = page.locator('[role="dialog"]').last();
-      let editor = dialog.locator('[role="textbox"],[contenteditable="true"],textarea').first();
-      if(!(await editor.isVisible({timeout:2500}).catch(()=>false))){
-        editor=page.locator('[role="textbox"],[contenteditable="true"],textarea').filter({hasNotText:/tìm kiếm|search/i}).last();
+      // Facebook composer can take a few seconds to mount after the trigger click.
+      await sleep(1800);
+
+      let dialog=page.locator('[role="dialog"]').filter({hasText:/Tạo bài viết|Create post/i}).last();
+      if(!(await dialog.isVisible({timeout:5000}).catch(()=>false))){
+        dialog=page.locator('[role="dialog"]').last();
       }
+      result.post.dialog_visible=await dialog.isVisible({timeout:2500}).catch(()=>false);
+
+      let editor=dialog.getByRole('textbox').last();
+      if(!(await editor.isVisible({timeout:3000}).catch(()=>false))){
+        editor=dialog.locator('[contenteditable="true"],textarea').last();
+      }
+      if(!(await editor.isVisible({timeout:2000}).catch(()=>false))){
+        editor=page.locator('[role="textbox"][contenteditable="true"],[contenteditable="true"][data-lexical-editor="true"],textarea').last();
+      }
+
       if (await editor.isVisible({timeout:3000}).catch(()=>false)) {
+        result.post.editor_found=true;
         await editor.click();
-        try { await editor.fill(intro); }
-        catch {
+        try {
+          await editor.fill(intro);
+        } catch {
           await page.keyboard.press('Control+A').catch(()=>{});
           await page.keyboard.insertText(intro);
         }
-        await sleep(900);
-        const posted = await clickFirst(page,[
-          p=>p.getByRole('button',{name:/^(post|đăng)$/i}),
-          p=>p.getByText(/^(post|đăng)$/i),
-          '[role="dialog"] [role="button"]:has-text("Đăng")',
-          '[role="dialog"] button:has-text("Đăng")'
-        ],4500);
-        if (posted) {
-          await sleep(4200);
+
+        await sleep(1400);
+
+        let postButton=dialog.getByRole('button',{name:/^(Đăng|Post)$/i}).last();
+        if(!(await postButton.isVisible({timeout:3000}).catch(()=>false))){
+          postButton=page.getByRole('button',{name:/^(Đăng|Post)$/i}).last();
+        }
+
+        result.post.post_button_visible=await postButton.isVisible({timeout:2500}).catch(()=>false);
+        result.post.post_button_enabled=result.post.post_button_visible
+          ? await postButton.isEnabled().catch(()=>false)
+          : false;
+
+        if(result.post.post_button_visible){
+          if(!result.post.post_button_enabled){
+            await postButton.waitFor({state:'visible',timeout:3000}).catch(()=>{});
+            await sleep(800);
+          }
+          await postButton.click({timeout:4000}).catch(()=>{});
+          await sleep(5000);
           await checkpoint(page);
+
+          // Reload before verification so success is not inferred from text still inside the composer.
+          await page.goto(resolved,{waitUntil:'domcontentloaded',timeout:30000});
+          await sleep(3500);
           const verifyText=clean(await page.locator('body').innerText().catch(()=>'' ));
           result.post.verified=verifyText.includes('Trang chia sẻ công thức dễ làm');
           result.post.status=result.post.verified ? 'DONE' : 'NEEDS_REVIEW';
         } else {
           result.post.status='NEEDS_REVIEW';
-          result.post.controls=await visibleControls(page,40);
+          result.post.controls=await visibleControls(page,60);
         }
       } else {
+        result.post.editor_found=false;
         result.post.status='NEEDS_REVIEW';
-        result.post.controls=await visibleControls(page,40);
+        result.post.dialog_text=clean(await dialog.innerText().catch(()=>'' )).slice(0,1800);
+        result.post.controls=await visibleControls(page,60);
       }
     }
   }
