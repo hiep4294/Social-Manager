@@ -1,7 +1,8 @@
-$ErrorActionPreference = 'Stop'
 param(
   [string]$PageUrl = 'https://www.facebook.com/share/18LofHUx56/?mibextid=wwXIfr'
 )
+
+$ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
 $ext = Join-Path $env:LOCALAPPDATA 'KODS-PC-Control\extension'
