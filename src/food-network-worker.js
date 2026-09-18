@@ -158,6 +158,8 @@ function syncCreateResults(db) {
 }
 
 function queueDuePages(db) {
+  const createEnabled = String(process.env.FOOD_NETWORK_CREATE_PAGES_ENABLED ?? 'false').toLowerCase() === 'true';
+  if (!createEnabled) return;
   const due = db.prepare("SELECT * FROM food_network_pages WHERE status='PLANNED' AND planned_create_at<=? ORDER BY slot LIMIT 1").get(nowIso());
   if (!due) return;
   const jobId = `food-create-page-${String(due.slot).padStart(2,'0')}`;
