@@ -3,6 +3,7 @@ import { cleanFacebookUrl, ensureGroupMonitorSchema, normalizeGroupMonitor } fro
 
 export const OPERATOR_ACTIONS = new Set([
   'create_page',
+  'post_page',
   'create_group',
   'join_group',
   'post_group',
@@ -57,6 +58,15 @@ export function normalizeOperatorJob(input = {}) {
     payload.category = String(payload.category || '').trim();
     payload.bio = String(payload.bio || '').trim();
     if (!payload.name) return { ok: false, error: 'Tạo Page cần name' };
+  }
+
+  if (action === 'post_page') {
+    payload.page_url = cleanFacebookUrl(payload.page_url);
+    payload.page_name = String(payload.page_name || '').trim();
+    payload.message = String(payload.message || '').trim();
+    payload.image_url = cleanUrl(payload.image_url);
+    if (!payload.page_url && !payload.page_name) return { ok: false, error: 'post_page cần page_url hoặc page_name' };
+    if (!payload.message && !payload.image_url) return { ok: false, error: 'post_page cần message hoặc image_url' };
   }
 
   if (action === 'create_group') {
