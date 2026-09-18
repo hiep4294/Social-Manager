@@ -1,0 +1,61 @@
+name: Daily Food Page Cloud
+
+on:
+  schedule:
+    - cron: '28 6 * * *' # 13:28 Asia/Ho_Chi_Minh
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Đăng thật lên Facebook'
+        required: true
+        type: boolean
+        default: false
+      date:
+        description: 'Ngày YYYY-MM-DD, để trống = hôm nay giờ Việt Nam'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-food-page-cloud
+  cancel-in-progress: false
+
+jobs:
+  daily-food:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      FACEBOOK_PAGE_ID: '61594459680780'
+      FACEBOOK_PAGE_ACCESS_TOKEN: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+      META_GRAPH_VERSION: ${{ vars.META_GRAPH_VERSION || 'v26.0' }}
+      FOOD_DATE: ${{ inputs.date }}
+      CLOUD_FOOD_PUBLISH: ${{ github.event_name == 'schedule' || inputs.publish == true }}
+
+    steps:
+      - name: Checkout automation branch
+        uses: actions/checkout@v4
+        with:
+          ref: stable
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate branded image and publish
+        run: node scripts/cloud-food-daily.mjs
+
+      - name: Upload generated image and log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-food-${{ github.run_id }}
+          path: artifacts/cloud-food/
+          if-no-files-found: warn
+          retention-days: 30
