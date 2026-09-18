@@ -228,8 +228,21 @@ function writeStatus(db, statusPath) {
   const today = localDateInVietnam();
   const postCounts = Object.fromEntries(db.prepare('SELECT status,COUNT(*) n FROM food_network_daily WHERE date=? GROUP BY status').all(today).map(x => [x.status, Number(x.n)]));
   const nextPage = db.prepare("SELECT slot,name,planned_create_at,status FROM food_network_pages WHERE status='PLANNED' ORDER BY planned_create_at LIMIT 1").get() || null;
+  const activePages = db.prepare("SELECT slot,name,page_url,status FROM food_network_pages WHERE status='ACTIVE' ORDER BY slot").all();
+  const createPagesEnabled = String(process.env.FOOD_NETWORK_CREATE_PAGES_ENABLED ?? 'false').toLowerCase() === 'true';
   try {
-    fs.writeFileSync(statusPath, JSON.stringify({ enabled: true, mode: 'AUTO', date: today, pages: pageCounts, today_posts: postCounts, next_page: nextPage, image_provider: 'Wikimedia Commons licensed media', updated_at: nowIso() }, null, 2), 'utf8');
+    fs.writeFileSync(statusPath, JSON.stringify({
+      enabled: true,
+      mode: 'AUTO',
+      date: today,
+      pages: pageCounts,
+      today_posts: postCounts,
+      active_pages: activePages,
+      create_pages_enabled: createPagesEnabled,
+      next_page: createPagesEnabled ? nextPage : null,
+      image_provider: 'Wikimedia Commons licensed media',
+      updated_at: nowIso()
+    }, null, 2), 'utf8');
   } catch {}
 }
 
