@@ -66,6 +66,32 @@ export async function executePostPage(page, payload, db) {
   await page.waitForTimeout(2200);
   await assertNoCheckpoint(page);
 
+  // Idempotency guard: if the beginning of the exact message is already visible
+  // on the recent Page timeline, treat the job as already completed.
+  const dedupeMarker = String(payload.dedupe_marker || payload.message || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 72);
+  if (dedupeMarker) {
+    for (const y of [0, 650, 1300, 2100]) {
+      await page.evaluate(v => window.scrollTo(0, v), y).catch(() => {});
+      await sleep(550);
+      const body = String(await page.locator('body').innerText().catch(() => '')).replace(/\s+/g, ' ');
+      if (body.includes(dedupeMarker)) {
+        return {
+          ok: true,
+          verified: true,
+          already_present: true,
+          page_name: target.name || payload.page_name || '',
+          page_url: target.url,
+          current_url: page.url()
+        };
+      }
+    }
+    await page.evaluate(() => window.scrollTo(0, 0)).catch(() => {});
+    await sleep(350);
+  }
+
   const opened = await clickFirst(page, [
     p => p.getByRole('button', { name: /^bạn đang nghĩ gì\?$|^what.?s on your mind\??$/i }),
     '[role="button"]:has-text("Bạn đang nghĩ gì?")',
@@ -135,6 +161,21 @@ export async function executePostPage(page, payload, db) {
     if (!(await postButton.isVisible({ timeout: 3000 }).catch(() => false)) ||
         !(await postButton.isEnabled().catch(() => false))) {
       throw Object.assign(new Error('Không tìm thấy nút Đăng khả dụng của Page'), { code: 'NEEDS_REVIEW' });
+    }
+
+    if (payload.dry_run === true) {
+      await page.keyboard.press('Escape').catch(() => {});
+      await sleep(500);
+      return {
+        ok: true,
+        dry_run: true,
+        ready_to_post: true,
+        verified_composer: true,
+        image_attached: Boolean(payload.image_url),
+        page_name: target.name || payload.page_name || '',
+        page_url: target.url,
+        current_url: page.url()
+      };
     }
 
     await postButton.click({ timeout: 4000 });
