@@ -19,6 +19,71 @@ async function clickFirst(page,list,timeout=2500){
   return false;
 }
 
+async function clickTextOrAncestor(page, pattern, timeout=2500){
+  const text=page.getByText(pattern,{exact:true}).last();
+  try{
+    if(!(await text.isVisible({timeout}))) return false;
+    const ancestor=text.locator('xpath=ancestor::*[@role="button" or self::button or self::a][1]');
+    if(await ancestor.count()){
+      await ancestor.click({timeout});
+      return true;
+    }
+    await text.click({timeout});
+    return true;
+  }catch{}
+  return false;
+}
+
+async function removeSelectedCategory(page,label){
+  const buttons=page.locator('button,[role="button"]');
+  const n=Math.min(await buttons.count().catch(()=>0),300);
+
+  // Prefer an explicit accessibility label such as "Xóa/Gỡ ...".
+  for(let i=0;i<n;i++){
+    const b=buttons.nth(i);
+    if(!(await b.isVisible().catch(()=>false))) continue;
+    const aria=clean(await b.getAttribute('aria-label').catch(()=>'' ));
+    const title=clean(await b.getAttribute('title').catch(()=>'' ));
+    const text=clean(await b.innerText().catch(()=>'' ));
+    const meta=[aria,title,text].join(' ');
+    if(meta.toLowerCase().includes(label.toLowerCase()) &&
+       /xóa|gỡ|bỏ|remove|delete/i.test(meta)){
+      await b.click({timeout:2500});
+      await sleep(450);
+      return {ok:true,method:'explicit',meta};
+    }
+  }
+
+  // Facebook category chips sometimes expose only an icon button next to the label.
+  const hits=page.getByText(label,{exact:true});
+  const hc=Math.min(await hits.count().catch(()=>0),8);
+  for(let i=0;i<hc;i++){
+    const hit=hits.nth(i);
+    if(!(await hit.isVisible().catch(()=>false))) continue;
+    for(let depth=1;depth<=5;depth++){
+      const box=hit.locator('xpath='+'../'.repeat(depth));
+      const boxText=clean(await box.innerText().catch(()=>'' ));
+      if(!boxText || boxText.length>120) continue;
+      const bs=box.locator('button,[role="button"]');
+      const bc=await bs.count().catch(()=>0);
+      for(let j=0;j<bc;j++){
+        const b=bs.nth(j);
+        if(!(await b.isVisible().catch(()=>false))) continue;
+        const aria=clean(await b.getAttribute('aria-label').catch(()=>'' ));
+        const title=clean(await b.getAttribute('title').catch(()=>'' ));
+        const text=clean(await b.innerText().catch(()=>'' ));
+        const meta=[aria,title,text].join(' ');
+        if(/xóa|gỡ|bỏ|remove|delete/i.test(meta) || (!text && boxText.includes(label))){
+          await b.click({timeout:2500});
+          await sleep(450);
+          return {ok:true,method:'nearby-icon',depth,meta,boxText};
+        }
+      }
+    }
+  }
+  return {ok:false};
+}
+
 async function visibleControls(page,limit=60){
   const out=[];
   const nodes=page.locator('button,[role="button"],a,input,textarea,[contenteditable="true"]');
@@ -133,22 +198,38 @@ try{
           console.log('PAGE_CATEGORY_RESULT='+JSON.stringify(result));
           process.exitCode=4;
         }else{
-          const saved=await clickFirst(page,[
-            p=>p.getByRole('button',{name:/^(Lưu|Save|Xong|Done)$/i}),
-            p=>p.getByText(/^(Lưu|Save|Xong|Done)$/i,{exact:true})
-          ],3000);
+          // This Page currently carries three unrelated categories.
+          // Keep only the food category so Facebook's max-3 rule cannot block Save.
+          result.removed={};
+          for(const oldCategory of ['Blog cá nhân','Sản phẩm/Dịch vụ','Nghệ thuật']){
+            result.removed[oldCategory]=await removeSelectedCategory(page,oldCategory);
+          }
+
+          await sleep(700);
+          result.editor_text_before_save=clean(await page.locator('body').innerText().catch(()=>'' )).slice(-1800);
+
+          let saved=await clickFirst(page,[
+            p=>p.getByRole('button',{name:/^(Lưu|Save|Xong|Done)$/i})
+          ],2200);
+          if(!saved){
+            saved=await clickTextOrAncestor(page,/^(Lưu|Save|Xong|Done)$/i,2200);
+          }
+
           result.saved=saved;
           if(!saved){
-            result.controls=await visibleControls(page);
+            result.controls=await visibleControls(page,90);
             console.log('PAGE_CATEGORY_RESULT='+JSON.stringify(result));
             process.exitCode=4;
           }else{
-            await sleep(2200);
+            await sleep(2600);
             await page.goto(categoryUrl,{waitUntil:'domcontentloaded',timeout:30000});
             await sleep(3000);
             const after=clean(await page.locator('body').innerText().catch(()=>'' ));
-            result.after=after.slice(0,1800);
-            result.verified=desiredPatterns.test(after) && !/Blog cá nhân/i.test(after);
+            result.after=after.slice(0,2200);
+            result.verified=desiredPatterns.test(after)
+              && !/Hạng mục\s+Blog cá nhân/i.test(after)
+              && !/Hạng mục\s+Sản phẩm\/Dịch vụ/i.test(after)
+              && !/Hạng mục\s+Nghệ thuật/i.test(after);
             result.changed=result.verified;
             result.status=result.verified?'DONE':'NEEDS_REVIEW';
             console.log('PAGE_CATEGORY_RESULT='+JSON.stringify(result));
