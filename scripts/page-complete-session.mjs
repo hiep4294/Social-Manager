@@ -35,10 +35,10 @@ function runNode(script, args=[]){
   });
 }
 
-writeStatus({ status:'WAITING_USER_LOGIN', message:'Chrome sẽ mở. Đăng nhập/xác minh Facebook thủ công rồi đóng cửa sổ Chrome.' });
+writeStatus({ status:'WAITING_USER_LOGIN', message:'Chrome sẽ mở. Đăng nhập/xác minh Facebook nếu cần; hệ thống sẽ tự nhận biết và tiếp tục.' });
 append('SESSION START target=' + target);
 
-const loginCode = await runNode(path.join(root,'scripts','operator-login.mjs'));
+const loginCode = await runNode(path.join(root,'scripts','page-login-auto.mjs'));
 if (loginCode !== 0) {
   writeStatus({ status:'LOGIN_FAILED', exit_code:loginCode });
   process.exit(loginCode);
