@@ -2,7 +2,12 @@ name: Daily Food Page Cloud
 
 on:
   schedule:
-    - cron: '28 6 * * *' # 13:28 Asia/Ho_Chi_Minh
+    - cron: '0 1 * * *' # 08:00 Asia/Ho_Chi_Minh
+    - cron: '0 2 * * *' # 09:00 Asia/Ho_Chi_Minh
+    - cron: '0 3 * * *' # 10:00 Asia/Ho_Chi_Minh
+    - cron: '0 4 * * *' # 11:00 Asia/Ho_Chi_Minh
+    - cron: '0 5 * * *' # 12:00 Asia/Ho_Chi_Minh
+    - cron: '0 6 * * *' # 13:00 Asia/Ho_Chi_Minh
   workflow_dispatch:
     inputs:
       publish:
@@ -32,6 +37,7 @@ jobs:
       META_GRAPH_VERSION: ${{ vars.META_GRAPH_VERSION || 'v26.0' }}
       FOOD_DATE: ${{ inputs.date }}
       CLOUD_FOOD_PUBLISH: ${{ github.event_name == 'schedule' || inputs.publish == true }}
+      CLOUD_TRIGGER_CRON: ${{ github.event.schedule }}
 
     steps:
       - name: Checkout automation branch
