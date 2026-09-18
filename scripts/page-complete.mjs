@@ -112,6 +112,52 @@ async function clickTextOrAncestor(page, pattern, timeout=2500){
   return false;
 }
 
+async function clickNearbyEdit(page, labels, timeout=2500){
+  for(const label of labels){
+    const hits=page.getByText(label,{exact:true});
+    const count=Math.min(await hits.count().catch(()=>0),8);
+    for(let i=0;i<count;i++){
+      const hit=hits.nth(i);
+      if(!(await hit.isVisible().catch(()=>false))) continue;
+      for(let depth=1;depth<=7;depth++){
+        const box=hit.locator('xpath='+'../'.repeat(depth));
+        const edit=box.getByText(/^(Chỉnh sửa|Edit)$/i,{exact:true}).last();
+        if(await edit.isVisible({timeout:300}).catch(()=>false)){
+          try{ await edit.click({timeout}); return {ok:true,label,depth}; }catch{}
+        }
+        const editBtn=box.locator('button,[role="button"],a').filter({hasText:/^\s*(Chỉnh sửa|Edit)\s*$/i}).last();
+        if(await editBtn.isVisible({timeout:300}).catch(()=>false)){
+          try{ await editBtn.click({timeout}); return {ok:true,label,depth}; }catch{}
+        }
+      }
+    }
+  }
+  return {ok:false};
+}
+
+async function fillOpenEditor(page, value){
+  const dialog=page.locator('[role="dialog"]').last();
+  let editor=dialog.locator('[role="textbox"],textarea,[contenteditable="true"]').first();
+  if(!(await editor.isVisible({timeout:1800}).catch(()=>false))){
+    editor=page.locator('[role="textbox"],textarea,[contenteditable="true"]').filter({hasNotText:/tìm kiếm|search/i}).last();
+  }
+  if(!(await editor.isVisible({timeout:1800}).catch(()=>false))) return false;
+  await editor.click();
+  try{ await editor.fill(value); }
+  catch{
+    await page.keyboard.press('Control+A').catch(()=>{});
+    await page.keyboard.insertText(value);
+  }
+  return true;
+}
+
+async function saveOpenEditor(page){
+  return await clickFirst(page,[
+    p=>p.getByRole('button',{name:/^(lưu|save|xong|done)$/i}),
+    p=>p.getByText(/^(lưu|save|xong|done)$/i)
+  ],3000);
+}
+
 async function visibleControls(page, limit=40){
   const out=[];
   const nodes=page.locator('button,[role="button"],a,input,textarea,[contenteditable="true"]');
@@ -170,127 +216,49 @@ try {
 
   const bio = `${name} – công thức dễ làm, món ngon mỗi ngày và mẹo bếp thực tế. Theo dõi trang để mỗi ngày có thêm một gợi ý cho bữa ăn.`;
 
+  // Facebook current Page UI: "Chỉnh sửa" is a link that navigates to the About/Profile editor.
   let opened = await clickFirst(page,[
-    p=>p.getByRole('button',{name:/^chỉnh sửa$|^edit$/i}),
-    p=>p.getByText(/^chỉnh sửa$|^edit$/i),
-    p=>p.getByRole('button',{name:/edit page details|edit details|chỉnh sửa chi tiết trang|chỉnh sửa thông tin|chỉnh sửa thông tin trang/i}),
-    p=>p.getByText(/edit page details|edit details|chỉnh sửa chi tiết trang|chỉnh sửa thông tin|chỉnh sửa thông tin trang/i)
+    p=>p.getByRole('link',{name:/chỉnh sửa trang cá nhân|edit profile/i}),
+    'a[aria-label*="Chỉnh sửa trang cá nhân" i]',
+    p=>p.getByText(/^chỉnh sửa$|^edit$/i)
   ],3500);
 
-  if(!opened){
-    const details=await clickFirst(page,[
-      p=>p.getByText(/^thông tin chi tiết$|^details$|^page details$/i),
-      p=>p.getByRole('link',{name:/thông tin chi tiết|details|page details/i}),
-      'a[href*="about"]'
-    ],3000);
-    if(details){
-      await sleep(1500);
-      opened=await clickFirst(page,[
-        p=>p.getByRole('button',{name:/edit|chỉnh sửa/i}),
-        p=>p.getByText(/chỉnh sửa thông tin|edit details|edit page details/i)
-      ],3000);
-    }
-  }
-
-  if (opened) {
-    await sleep(1500);
+  if(opened){
+    await sleep(1800);
     result.edit.opened=true;
-    result.edit.controls=await visibleControls(page,30);
+    result.edit.edit_url=page.url();
 
-    if (await fillFirst(page,[
-      p=>p.getByLabel(/bio|tiểu sử|mô tả/i),
-      'textarea[placeholder*="bio" i]',
-      'textarea[placeholder*="mô tả" i]',
-      'textarea',
-      '[contenteditable="true"][aria-label*="tiểu sử" i]',
-      '[contenteditable="true"][aria-label*="bio" i]'
-    ],bio,3000)) result.edit.changed.push('bio');
-    else {
-      const bioRow=await clickFirst(page,[
-        p=>p.getByText(/^gợi ý món mỗi ngày$/i),
-        p=>p.getByText(/^tiểu sử$|^bio$|^mô tả$/i)
-      ],1800);
-      if(bioRow){
-        await sleep(700);
-        if(await fillFirst(page,[
-          p=>p.getByRole('textbox'),
-          'textarea',
-          '[contenteditable="true"]'
-        ],bio,2500)){
+    // On the edit page, the bio is a section row, not an immediately editable textarea.
+    const currentBio='Gợi ý món mỗi ngày';
+    const bioClick=await clickNearbyEdit(page,['Tiểu sử',currentBio],2600);
+    result.edit.bio_click=bioClick;
+
+    if(bioClick.ok){
+      await sleep(900);
+      if(await fillOpenEditor(page,bio)){
+        const saved=await saveOpenEditor(page);
+        if(saved){
           result.edit.changed.push('bio');
-          await clickFirst(page,[
-            p=>p.getByRole('button',{name:/^(lưu|save|xong|done)$/i}),
-            p=>p.getByText(/^(lưu|save|xong|done)$/i)
-          ],2000);
-          await sleep(700);
+          await sleep(1000);
         }
       }
     }
 
-    if(!result.edit.changed.includes('bio')){
-      const clickedBio=await clickTextOrAncestor(page,/^gợi ý món mỗi ngày$/i,2200);
-      if(clickedBio){
-        await sleep(900);
-        let editor=page.locator('[role="dialog"] [role="textbox"],[role="dialog"] textarea,[role="dialog"] [contenteditable="true"]').first();
-        if(!(await editor.isVisible({timeout:1800}).catch(()=>false))) editor=page.getByRole('textbox').last();
-        if(await editor.isVisible({timeout:1800}).catch(()=>false)){
-          await editor.click();
-          await page.keyboard.press('Control+A').catch(()=>{});
-          await page.keyboard.insertText(bio);
-          const saved=await clickFirst(page,[
-            p=>p.getByRole('button',{name:/^(lưu|save|xong|done)$/i}),
-            p=>p.getByText(/^(lưu|save|xong|done)$/i)
-          ],2500);
-          if(saved){result.edit.changed.push('bio');await sleep(900);}
-        }
-      }
-    }
-
-    if (await fillFirst(page,[
-      p=>p.getByLabel(/category|danh mục|hạng mục/i),
-      'input[placeholder*="category" i]',
-      'input[placeholder*="danh mục" i]',
-      'input[placeholder*="hạng mục" i]'
-    ],'Food & beverage',2200)) {
+    // If Facebook exposes category as a direct editable field, update it; otherwise leave it for the next dedicated pass.
+    const catField=page.getByRole('textbox',{name:/danh mục|category|hạng mục/i}).first();
+    if(await catField.isVisible({timeout:800}).catch(()=>false)){
+      await catField.fill('Food & beverage');
       await sleep(700);
-      await clickFirst(page,[p=>p.getByRole('option').first(),'[role="option"]'],1500);
-      result.edit.changed.push('category');
-    } else {
-      const catRow=await clickFirst(page,[
-        p=>p.getByText(/^blog cá nhân$/i),
-        p=>p.getByText(/^danh mục$|^category$|^hạng mục$/i)
-      ],1600);
-      if(catRow){
-        await sleep(600);
-        if(await fillFirst(page,[
-          p=>p.getByRole('textbox'),
-          'input[type="text"]'
-        ],'Food & beverage',2200)){
-          await sleep(700);
-          if(await clickFirst(page,[p=>p.getByRole('option').first(),'[role="option"]'],1500)){
-            result.edit.changed.push('category');
-            await clickFirst(page,[
-              p=>p.getByRole('button',{name:/^(lưu|save|xong|done)$/i}),
-              p=>p.getByText(/^(lưu|save|xong|done)$/i)
-            ],1800);
-            await sleep(700);
-          }
+      if(await clickFirst(page,[p=>p.getByRole('option').first(),'[role="option"]'],1200)){
+        if(await saveOpenEditor(page)){
+          result.edit.changed.push('category');
+          await sleep(800);
         }
       }
     }
 
-    if (result.edit.changed.length) {
-      const saved = await clickFirst(page,[
-        p=>p.getByRole('button',{name:/^(save|lưu|done|xong)$/i}),
-        'button:has-text("Save")','button:has-text("Lưu")'
-      ],3500);
-      result.edit.status = saved ? 'DONE' : 'NEEDS_REVIEW';
-      await sleep(1800);
-      await checkpoint(page);
-    } else {
-      result.edit.status='NEEDS_REVIEW';
-      result.edit.controls=await visibleControls(page,40);
-    }
+    result.edit.controls=await visibleControls(page,40);
+    result.edit.status=result.edit.changed.length ? 'DONE' : 'NEEDS_REVIEW';
   } else {
     result.edit.status='NEEDS_REVIEW';
     result.edit.controls=await visibleControls(page,40);
@@ -307,12 +275,13 @@ try {
     result.post.status='ALREADY_EXISTS';
   } else {
     let openedPost = await clickFirst(page,[
-      p=>p.getByRole('button',{name:/create a post|tạo bài viết|what.?s on your mind|bạn đang nghĩ gì|chia sẻ suy nghĩ/i}),
-      '[role="button"]:has-text("Tạo bài viết")',
+      '[role="button"]:has-text("Chia sẻ suy nghĩ")',
       '[role="button"]:has-text("Bạn đang nghĩ gì")',
-      '[role="button"]:has-text("Chia sẻ suy nghĩ")'
+      '[role="button"]:has-text("Tạo bài viết")',
+      p=>p.getByRole('button',{name:/create a post|tạo bài viết|what.?s on your mind|bạn đang nghĩ gì|chia sẻ suy nghĩ/i})
     ],3500);
-    if(!openedPost) openedPost=await clickTextOrAncestor(page,/bạn đang nghĩ gì|chia sẻ suy nghĩ|create a post|what.?s on your mind/i,3000);
+    if(!openedPost) openedPost=await clickTextOrAncestor(page,/chia sẻ suy nghĩ|bạn đang nghĩ gì|create a post|what.?s on your mind/i,3000);
+    result.post.opened=openedPost;
 
     if (!openedPost) result.post.status='NEEDS_REVIEW';
     else {
