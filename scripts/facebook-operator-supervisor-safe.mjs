@@ -91,7 +91,7 @@ function runtimeRestartDelay(lifetimeMs) {
 function startRuntime() {
   if (runtime || stopping) return;
   runtimeStartedAt = Date.now();
-  runtime = spawn(process.execPath, [runtimeFile], { cwd: root, env: process.env, stdio: 'inherit', windowsHide: false });
+  runtime = spawn(process.execPath, [runtimeFile], { cwd: root, env: process.env, stdio: 'inherit', windowsHide: true });
   log(`runtime started pid=${runtime.pid}`);
   writeSupervisorStatus({ status: 'RUNTIME_STARTED' });
   const child = runtime;
