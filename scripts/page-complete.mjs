@@ -84,6 +84,19 @@ async function fillFirst(page, list, value, timeout=2500){
   return false;
 }
 
+async function visibleControls(page, limit=40){
+  const out=[];
+  const nodes=page.locator('button,[role="button"],a,input,textarea,[contenteditable="true"]');
+  const n=Math.min(await nodes.count().catch(()=>0),200);
+  for(let i=0;i<n && out.length<limit;i++){
+    const el=nodes.nth(i);
+    if(!(await el.isVisible().catch(()=>false))) continue;
+    const text=clean(await el.innerText().catch(()=>'' ) || await el.getAttribute('aria-label').catch(()=>'' ) || await el.getAttribute('placeholder').catch(()=>'' ));
+    if(text) out.push(text.slice(0,140));
+  }
+  return [...new Set(out)];
+}
+
 const root = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/(\w:)/,'$1'));
 const profile = path.join(root,'data','facebook-browser-profile');
 const browser = process.env.FB_OPERATOR_BROWSER_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
@@ -128,6 +141,8 @@ try {
   const bio = `${name} – công thức dễ làm, món ngon mỗi ngày và mẹo bếp thực tế. Theo dõi trang để mỗi ngày có thêm một gợi ý cho bữa ăn.`;
 
   let opened = await clickFirst(page,[
+    p=>p.getByRole('button',{name:/^chỉnh sửa$|^edit$/i}),
+    p=>p.getByText(/^chỉnh sửa$|^edit$/i),
     p=>p.getByRole('button',{name:/edit page details|edit details|chỉnh sửa chi tiết trang|chỉnh sửa thông tin|chỉnh sửa thông tin trang/i}),
     p=>p.getByText(/edit page details|edit details|chỉnh sửa chi tiết trang|chỉnh sửa thông tin|chỉnh sửa thông tin trang/i)
   ],3500);
@@ -148,22 +163,71 @@ try {
   }
 
   if (opened) {
-    await sleep(1200);
+    await sleep(1500);
+    result.edit.opened=true;
+    result.edit.controls=await visibleControls(page,30);
+
     if (await fillFirst(page,[
       p=>p.getByLabel(/bio|tiểu sử|mô tả/i),
       'textarea[placeholder*="bio" i]',
       'textarea[placeholder*="mô tả" i]',
-      'textarea'
+      'textarea',
+      '[contenteditable="true"][aria-label*="tiểu sử" i]',
+      '[contenteditable="true"][aria-label*="bio" i]'
     ],bio,3000)) result.edit.changed.push('bio');
+    else {
+      const bioRow=await clickFirst(page,[
+        p=>p.getByText(/^gợi ý món mỗi ngày$/i),
+        p=>p.getByText(/^tiểu sử$|^bio$|^mô tả$/i)
+      ],1800);
+      if(bioRow){
+        await sleep(700);
+        if(await fillFirst(page,[
+          p=>p.getByRole('textbox'),
+          'textarea',
+          '[contenteditable="true"]'
+        ],bio,2500)){
+          result.edit.changed.push('bio');
+          await clickFirst(page,[
+            p=>p.getByRole('button',{name:/^(lưu|save|xong|done)$/i}),
+            p=>p.getByText(/^(lưu|save|xong|done)$/i)
+          ],2000);
+          await sleep(700);
+        }
+      }
+    }
 
     if (await fillFirst(page,[
       p=>p.getByLabel(/category|danh mục|hạng mục/i),
       'input[placeholder*="category" i]',
-      'input[placeholder*="danh mục" i]'
+      'input[placeholder*="danh mục" i]',
+      'input[placeholder*="hạng mục" i]'
     ],'Food & beverage',2200)) {
       await sleep(700);
       await clickFirst(page,[p=>p.getByRole('option').first(),'[role="option"]'],1500);
       result.edit.changed.push('category');
+    } else {
+      const catRow=await clickFirst(page,[
+        p=>p.getByText(/^blog cá nhân$/i),
+        p=>p.getByText(/^danh mục$|^category$|^hạng mục$/i)
+      ],1600);
+      if(catRow){
+        await sleep(600);
+        if(await fillFirst(page,[
+          p=>p.getByRole('textbox'),
+          'input[type="text"]'
+        ],'Food & beverage',2200)){
+          await sleep(700);
+          if(await clickFirst(page,[p=>p.getByRole('option').first(),'[role="option"]'],1500)){
+            result.edit.changed.push('category');
+            await clickFirst(page,[
+              p=>p.getByRole('button',{name:/^(lưu|save|xong|done)$/i}),
+              p=>p.getByText(/^(lưu|save|xong|done)$/i)
+            ],1800);
+            await sleep(700);
+          }
+        }
+      }
     }
 
     if (result.edit.changed.length) {
@@ -174,8 +238,14 @@ try {
       result.edit.status = saved ? 'DONE' : 'NEEDS_REVIEW';
       await sleep(1800);
       await checkpoint(page);
-    } else result.edit.status='NEEDS_REVIEW';
-  } else result.edit.status='NEEDS_REVIEW';
+    } else {
+      result.edit.status='NEEDS_REVIEW';
+      result.edit.controls=await visibleControls(page,40);
+    }
+  } else {
+    result.edit.status='NEEDS_REVIEW';
+    result.edit.controls=await visibleControls(page,40);
+  }
 
   await page.goto(resolved,{waitUntil:'domcontentloaded',timeout:30000});
   await sleep(3500);
@@ -188,27 +258,42 @@ try {
     result.post.status='ALREADY_EXISTS';
   } else {
     const openedPost = await clickFirst(page,[
-      p=>p.getByText(/create a post|tạo bài viết|what.?s on your mind|bạn đang nghĩ gì/i),
-      '[role="button"]:has-text("Tạo bài viết")'
+      p=>p.getByRole('button',{name:/create a post|tạo bài viết|what.?s on your mind|bạn đang nghĩ gì|chia sẻ suy nghĩ/i}),
+      p=>p.getByText(/create a post|tạo bài viết|what.?s on your mind|bạn đang nghĩ gì|chia sẻ suy nghĩ/i),
+      '[role="button"]:has-text("Tạo bài viết")',
+      '[role="button"]:has-text("Bạn đang nghĩ gì")',
+      '[role="button"]:has-text("Chia sẻ suy nghĩ")'
     ],4500);
 
     if (!openedPost) result.post.status='NEEDS_REVIEW';
     else {
       await sleep(900);
       const dialog = page.locator('[role="dialog"]').last();
-      const editor = dialog.locator('[contenteditable="true"],textarea').first();
+      let editor = dialog.locator('[role="textbox"],[contenteditable="true"],textarea').first();
+      if(!(await editor.isVisible({timeout:2500}).catch(()=>false))){
+        editor=page.locator('[role="textbox"],[contenteditable="true"],textarea').filter({hasNotText:/tìm kiếm|search/i}).last();
+      }
       if (await editor.isVisible({timeout:3000}).catch(()=>false)) {
         await editor.fill(intro);
+        await sleep(600);
         const posted = await clickFirst(page,[
           p=>p.getByRole('button',{name:/^(post|đăng)$/i}),
+          p=>p.getByText(/^(post|đăng)$/i),
+          '[role="dialog"] [role="button"]:has-text("Đăng")',
           '[role="dialog"] button:has-text("Đăng")'
-        ],4000);
+        ],4500);
         if (posted) {
           await sleep(3500);
           await checkpoint(page);
           result.post.status='DONE';
-        } else result.post.status='NEEDS_REVIEW';
-      } else result.post.status='NEEDS_REVIEW';
+        } else {
+          result.post.status='NEEDS_REVIEW';
+          result.post.controls=await visibleControls(page,40);
+        }
+      } else {
+        result.post.status='NEEDS_REVIEW';
+        result.post.controls=await visibleControls(page,40);
+      }
     }
   }
 
