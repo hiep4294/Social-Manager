@@ -1,6 +1,6 @@
 {
   "name": "social-manager",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "private": true,
   "description": "Social Manager V2.0 with Chrome Extension primary Facebook operator, Playwright fallback, Food Network automation and bounded self-healing",
   "type": "module",
@@ -14,6 +14,8 @@
     "operator": "node src/facebook-operator-worker.js",
     "operator:login": "node scripts/operator-login.mjs",
     "operator:agent": "node scripts/start-facebook-operator-agent.mjs",
+    "page:audit": "node scripts/page-audit.mjs",
+    "page:complete": "node scripts/page-complete.mjs",
     "operator:autostart:install": "node scripts/manage-facebook-operator-autostart.mjs install",
     "operator:autostart:status": "node scripts/manage-facebook-operator-autostart.mjs status",
     "operator:autostart:remove": "node scripts/manage-facebook-operator-autostart.mjs remove",
