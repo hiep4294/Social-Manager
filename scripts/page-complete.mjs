@@ -11,6 +11,7 @@ function clean(s){ return String(s||'').replace(/\s+/g,' ').trim(); }
 function managedPageNameFromText(text){
   const s=clean(text);
   const patterns=[
+    /Quản lý trang\s+(.+?)\s+(?:Công cụ chuyên nghiệp|Bảng điều khiển|Thông tin chi tiết)/i,
     /Chuyển sang Trang của (.+?) để /i,
     /Switch into (.+?) to /i,
     /Switch to (.+?) to /i
@@ -84,6 +85,21 @@ async function fillFirst(page, list, value, timeout=2500){
   return false;
 }
 
+async function clickTextOrAncestor(page, pattern, timeout=2500){
+  const text=page.getByText(pattern).first();
+  try {
+    if(!(await text.isVisible({timeout}))) return false;
+    const ancestor=text.locator('xpath=ancestor::*[@role="button" or self::button or self::a][1]');
+    if(await ancestor.count()){
+      await ancestor.click({timeout});
+      return true;
+    }
+    await text.click({timeout});
+    return true;
+  } catch {}
+  return false;
+}
+
 async function visibleControls(page, limit=40){
   const out=[];
   const nodes=page.locator('button,[role="button"],a,input,textarea,[contenteditable="true"]');
@@ -132,10 +148,12 @@ try {
   const resolved = page.url();
   const title = await page.title().catch(()=> '');
   const h1 = (await page.locator('h1').allTextContents().catch(()=>[])).map(clean).filter(Boolean);
-  const body0 = clean(await page.locator('body').innerText().catch(()=>'' )).slice(0,3500);
+  const bodyFull = clean(await page.locator('body').innerText().catch(()=>'' ));
+  const body0 = bodyFull.slice(0,3500);
   const generic=/^(quản lý trang|manage page|facebook)$/i;
   const h1Name=h1.find(x=>!generic.test(x)) || '';
-  const name = profileSwitch.page_name || h1Name || clean(title.replace(/\s*[|·-]\s*Facebook\s*$/i,'')) || 'Bếp ngon mỗi ngày';
+  const inferredName=managedPageNameFromText(bodyFull);
+  const name = profileSwitch.page_name || inferredName || h1Name || clean(title.replace(/\s*[|·-]\s*Facebook\s*$/i,'')) || 'Bếp ngon mỗi ngày';
   result.inspect = {url:resolved,title,page_name:name,text:body0};
 
   const bio = `${name} – công thức dễ làm, món ngon mỗi ngày và mẹo bếp thực tế. Theo dõi trang để mỗi ngày có thêm một gợi ý cho bữa ăn.`;
@@ -193,6 +211,25 @@ try {
             p=>p.getByText(/^(lưu|save|xong|done)$/i)
           ],2000);
           await sleep(700);
+        }
+      }
+    }
+
+    if(!result.edit.changed.includes('bio')){
+      const clickedBio=await clickTextOrAncestor(page,/^gợi ý món mỗi ngày$/i,2200);
+      if(clickedBio){
+        await sleep(900);
+        let editor=page.locator('[role="dialog"] [role="textbox"],[role="dialog"] textarea,[role="dialog"] [contenteditable="true"]').first();
+        if(!(await editor.isVisible({timeout:1800}).catch(()=>false))) editor=page.getByRole('textbox').last();
+        if(await editor.isVisible({timeout:1800}).catch(()=>false)){
+          await editor.click();
+          await page.keyboard.press('Control+A').catch(()=>{});
+          await page.keyboard.insertText(bio);
+          const saved=await clickFirst(page,[
+            p=>p.getByRole('button',{name:/^(lưu|save|xong|done)$/i}),
+            p=>p.getByText(/^(lưu|save|xong|done)$/i)
+          ],2500);
+          if(saved){result.edit.changed.push('bio');await sleep(900);}
         }
       }
     }
@@ -257,13 +294,13 @@ try {
   if (currentText.includes('Trang chia sẻ công thức dễ làm')) {
     result.post.status='ALREADY_EXISTS';
   } else {
-    const openedPost = await clickFirst(page,[
+    let openedPost = await clickFirst(page,[
       p=>p.getByRole('button',{name:/create a post|tạo bài viết|what.?s on your mind|bạn đang nghĩ gì|chia sẻ suy nghĩ/i}),
-      p=>p.getByText(/create a post|tạo bài viết|what.?s on your mind|bạn đang nghĩ gì|chia sẻ suy nghĩ/i),
       '[role="button"]:has-text("Tạo bài viết")',
       '[role="button"]:has-text("Bạn đang nghĩ gì")',
       '[role="button"]:has-text("Chia sẻ suy nghĩ")'
-    ],4500);
+    ],3500);
+    if(!openedPost) openedPost=await clickTextOrAncestor(page,/bạn đang nghĩ gì|chia sẻ suy nghĩ|create a post|what.?s on your mind/i,3000);
 
     if (!openedPost) result.post.status='NEEDS_REVIEW';
     else {
@@ -274,8 +311,13 @@ try {
         editor=page.locator('[role="textbox"],[contenteditable="true"],textarea').filter({hasNotText:/tìm kiếm|search/i}).last();
       }
       if (await editor.isVisible({timeout:3000}).catch(()=>false)) {
-        await editor.fill(intro);
-        await sleep(600);
+        await editor.click();
+        try { await editor.fill(intro); }
+        catch {
+          await page.keyboard.press('Control+A').catch(()=>{});
+          await page.keyboard.insertText(intro);
+        }
+        await sleep(900);
         const posted = await clickFirst(page,[
           p=>p.getByRole('button',{name:/^(post|đăng)$/i}),
           p=>p.getByText(/^(post|đăng)$/i),
