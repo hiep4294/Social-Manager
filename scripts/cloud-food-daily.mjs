@@ -13,6 +13,8 @@ const PUBLISH = String(process.env.CLOUD_FOOD_PUBLISH || 'false').toLowerCase() 
 const DATE = String(process.env.FOOD_DATE || localDateInVietnam()).trim();
 const outDir = path.resolve(process.cwd(), 'artifacts', 'cloud-food');
 const TRIGGER_CRON = String(process.env.CLOUD_TRIGGER_CRON || '').trim();
+const STATE_JSON = path.resolve(process.cwd(), 'content', 'hom-nay-an-gi-recipe-state.json');
+const STATE_CSV = path.resolve(process.cwd(), 'content', 'hom-nay-an-gi-recipe-state.csv');
 
 function selectedPostingHourVN(date) {
   const digest = crypto.createHash('sha256')
@@ -73,91 +75,138 @@ function recipeMarker(id) {
   return `#RID${String(Number(id)).padStart(3,'0')}`;
 }
 
-function vietnamDateFromIso(iso) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone:'Asia/Ho_Chi_Minh',
-    year:'numeric',
-    month:'2-digit',
-    day:'2-digit'
-  }).formatToParts(d);
-  const m = Object.fromEntries(parts.map(x => [x.type,x.value]));
-  return `${m.year}-${m.month}-${m.day}`;
+function csvCell(value='') {
+  const s = String(value ?? '');
+  return /[",\n]/.test(s) ? `"${s.replaceAll('"','""')}"` : s;
 }
 
-async function fetchAllPagePosts() {
-  if (!TOKEN) {
-    if (PUBLISH) throw new Error('Thiếu FACEBOOK_PAGE_ACCESS_TOKEN nên không thể kiểm tra lịch sử chống trùng');
-    return { posts:[], historyAvailable:false };
-  }
-
-  const posts = [];
-  let after = '';
-  const maxPages = 500; // 50,000 posts at limit=100; stop instead of risking an accidental repeat.
-
-  for (let pageNo=0; pageNo<maxPages; pageNo += 1) {
-    const u = new URL(`https://graph.facebook.com/${GRAPH_VERSION}/${PAGE_ID}/posts`);
-    u.searchParams.set('fields','id,message,created_time');
-    u.searchParams.set('limit','100');
-    u.searchParams.set('access_token',TOKEN);
-    if (after) u.searchParams.set('after',after);
-
-    const r = await fetch(u);
-    const body = await r.json().catch(() => ({}));
-    if (!r.ok || body?.error) {
-      throw new Error(body?.error?.message || `Không đọc được lịch sử Facebook Page HTTP ${r.status}`);
-    }
-
-    const batch = Array.isArray(body.data) ? body.data : [];
-    posts.push(...batch);
-
-    const nextAfter = String(body?.paging?.cursors?.after || '');
-    if (!body?.paging?.next || !nextAfter || nextAfter === after || batch.length === 0) {
-      return { posts, historyAvailable:true };
-    }
-    after = nextAfter;
-  }
-
-  throw new Error('Lịch sử Page vượt giới hạn quét an toàn; dừng đăng để tránh lặp món');
-}
-
-function analyzeHistory(posts) {
-  const recipes = foodRecipes();
-  const used = new Set();
-  let todayPosted = false;
-
-  for (const post of posts) {
-    const message = String(post?.message || '');
-    const normalizedMessage = norm(message);
-
-    for (const hit of message.matchAll(/#RID(\d{1,5})\b/gi)) {
-      const id = Number(hit[1]);
-      if (recipes.some(r => r.id === id)) used.add(id);
-    }
-
-    for (const recipe of recipes) {
-      const title = norm(recipe.title);
-      if (title && normalizedMessage.includes(title)) used.add(recipe.id);
-    }
-
-    const isAutomationRecipe = /#HomNayAnGi\b/i.test(message)
-      || /#RID\d{1,5}\b/i.test(message)
-      || recipes.some(r => {
-        const title = norm(r.title);
-        return title && normalizedMessage.includes(title);
-      });
-
-    if (isAutomationRecipe && vietnamDateFromIso(post?.created_time) === DATE) {
-      todayPosted = true;
-    }
-  }
-
+function catalogState() {
   return {
-    usedRecipeIds:[...used].sort((a,b)=>a-b),
-    todayPosted,
-    scannedPosts:posts.length
+    version:1,
+    page_id:PAGE_ID,
+    page_name:PAGE_NAME,
+    updated_at:null,
+    last_post_date:null,
+    last_post_id:null,
+    notes:'Authoritative recipe usage state. used=true means never select this recipe again unless manually reset.',
+    recipes:foodRecipes().map(r => ({
+      id:r.id,
+      title:r.title,
+      category:r.category,
+      used:false,
+      posted_date:null,
+      posted_at:null,
+      facebook_post_id:null
+    }))
   };
+}
+
+function loadRecipeState() {
+  let state = catalogState();
+  if (fs.existsSync(STATE_JSON)) {
+    const parsed = JSON.parse(fs.readFileSync(STATE_JSON,'utf8'));
+    if (String(parsed?.page_id || PAGE_ID) !== PAGE_ID) {
+      throw new Error('Recipe state thuộc Page khác; dừng để tránh đánh dấu sai');
+    }
+    state = { ...state, ...parsed };
+  }
+
+  const previous = new Map((state.recipes || []).map(x => [Number(x.id), x]));
+  state.recipes = foodRecipes().map(r => {
+    const old = previous.get(Number(r.id)) || {};
+    return {
+      id:r.id,
+      title:r.title,
+      category:r.category,
+      used:Boolean(old.used),
+      posted_date:old.posted_date || null,
+      posted_at:old.posted_at || null,
+      facebook_post_id:old.facebook_post_id || null
+    };
+  });
+  state.page_id = PAGE_ID;
+  state.page_name = PAGE_NAME;
+  state.version = 1;
+  return state;
+}
+
+function saveRecipeState(state) {
+  state.updated_at = new Date().toISOString();
+  fs.mkdirSync(path.dirname(STATE_JSON), { recursive:true });
+  fs.writeFileSync(STATE_JSON, JSON.stringify(state,null,2)+'\n','utf8');
+
+  const rows = [
+    ['id','title','category','used','posted_date','posted_at','facebook_post_id'],
+    ...(state.recipes || []).map(r => [
+      r.id,r.title,r.category,Boolean(r.used),r.posted_date || '',r.posted_at || '',r.facebook_post_id || ''
+    ])
+  ];
+  fs.writeFileSync(STATE_CSV, rows.map(row => row.map(csvCell).join(',')).join('\n')+'\n','utf8');
+}
+
+function usedRecipeIds(state) {
+  return (state.recipes || []).filter(r => r.used).map(r => Number(r.id)).filter(Number.isFinite);
+}
+
+function markRecipeUsed(state, recipeId, { date=DATE, postId=null, postedAt=new Date().toISOString() } = {}) {
+  const item = (state.recipes || []).find(r => Number(r.id) === Number(recipeId));
+  if (!item) throw new Error(`Không tìm thấy recipe_id=${recipeId} trong state`);
+  item.used = true;
+  item.posted_date = date;
+  item.posted_at = postedAt;
+  item.facebook_post_id = postId || item.facebook_post_id || null;
+}
+
+function vietnamDayBounds(date) {
+  return {
+    start:Math.floor(Date.parse(`${date}T00:00:00+07:00`) / 1000),
+    end:Math.floor(Date.parse(`${date}T23:59:59+07:00`) / 1000)
+  };
+}
+
+async function checkTodayRecentPosts() {
+  if (!TOKEN) {
+    if (PUBLISH) throw new Error('Thiếu FACEBOOK_PAGE_ACCESS_TOKEN nên không thể kiểm tra chống đăng trùng trong ngày');
+    return { found:false, checked:false };
+  }
+
+  const { start, end } = vietnamDayBounds(DATE);
+  const u = new URL(`https://graph.facebook.com/${GRAPH_VERSION}/${PAGE_ID}/posts`);
+  u.searchParams.set('fields','id,message,created_time');
+  u.searchParams.set('since',String(start));
+  u.searchParams.set('until',String(end));
+  u.searchParams.set('limit','10');
+  u.searchParams.set('access_token',TOKEN);
+
+  const r = await fetch(u);
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok || body?.error) {
+    throw new Error(body?.error?.message || `Không kiểm tra được bài hôm nay HTTP ${r.status}`);
+  }
+
+  const recipes = foodRecipes();
+  for (const post of body.data || []) {
+    const message = String(post?.message || '');
+    const rid = message.match(/#RID(\d{1,5})\b/i);
+    let recipeId = rid ? Number(rid[1]) : null;
+
+    if (!recipeId) {
+      const normalized = norm(message);
+      const hit = recipes.find(x => normalized.includes(norm(x.title)));
+      recipeId = hit?.id || null;
+    }
+
+    if (/#HomNayAnGi\b/i.test(message) || rid || recipeId) {
+      return {
+        found:true,
+        checked:true,
+        recipeId,
+        postId:String(post?.id || ''),
+        createdTime:String(post?.created_time || '')
+      };
+    }
+  }
+  return { found:false, checked:true };
 }
 
 async function publicDomainFoodImage(title) {
@@ -302,10 +351,9 @@ async function publishPhoto(file, caption) {
 const page = foodPageBlueprints().find(x => x.slot === PAGE_SLOT);
 if (!page) throw new Error('Không tìm thấy blueprint Hôm Nay Ăn Gì?');
 
-const historyFetch = await fetchAllPagePosts();
-const history = analyzeHistory(historyFetch.posts);
+const state = loadRecipeState();
 
-if (history.todayPosted) {
+if (state.last_post_date === DATE) {
   const result = {
     status:'ALREADY_POSTED_TODAY',
     publish_requested:PUBLISH,
@@ -313,28 +361,57 @@ if (history.todayPosted) {
     selected_hour_local:`${String(SELECTED_HOUR_VN).padStart(2,'0')}:00`,
     trigger_hour_local:TRIGGER_HOUR_VN == null ? null : `${String(TRIGGER_HOUR_VN).padStart(2,'0')}:00`,
     page:{ id:PAGE_ID, name:PAGE_NAME },
-    history:{ available:historyFetch.historyAvailable, scanned_posts:history.scannedPosts, used_recipe_ids:history.usedRecipeIds },
+    state:{ used_count:usedRecipeIds(state).length, total:state.recipes.length, source:path.relative(process.cwd(),STATE_JSON) },
     published:null
   };
-  fs.writeFileSync(path.join(outDir, `${DATE}-result.json`), JSON.stringify(result,null,2), 'utf8');
+  fs.writeFileSync(path.join(outDir, `${DATE}-result.json`), JSON.stringify(result,null,2),'utf8');
+  console.log('CLOUD_FOOD_RESULT='+JSON.stringify(result));
+  process.exit(0);
+}
+
+// Small recovery check only for today's recent posts. No full Page-history scan.
+const todayCheck = await checkTodayRecentPosts();
+if (todayCheck.found) {
+  if (todayCheck.recipeId) {
+    markRecipeUsed(state, todayCheck.recipeId, {
+      date:DATE,
+      postId:todayCheck.postId || null,
+      postedAt:todayCheck.createdTime || new Date().toISOString()
+    });
+  }
+  state.last_post_date = DATE;
+  state.last_post_id = todayCheck.postId || state.last_post_id || null;
+  saveRecipeState(state);
+
+  const result = {
+    status:'RECOVERED_ALREADY_POSTED_TODAY',
+    publish_requested:PUBLISH,
+    date:DATE,
+    page:{ id:PAGE_ID, name:PAGE_NAME },
+    recovered_recipe_id:todayCheck.recipeId || null,
+    recovered_post_id:todayCheck.postId || null,
+    state:{ used_count:usedRecipeIds(state).length, total:state.recipes.length, source:path.relative(process.cwd(),STATE_JSON) },
+    published:null
+  };
+  fs.writeFileSync(path.join(outDir, `${DATE}-result.json`), JSON.stringify(result,null,2),'utf8');
   console.log('CLOUD_FOOD_RESULT='+JSON.stringify(result));
   process.exit(0);
 }
 
 const allRecipes = foodRecipes();
-const usedSet = new Set(history.usedRecipeIds.map(Number));
-if (allRecipes.every(r => usedSet.has(r.id))) {
+const usedIds = usedRecipeIds(state);
+const usedSet = new Set(usedIds);
+
+if (allRecipes.every(r => usedSet.has(Number(r.id)))) {
   const result = {
     status:'NO_UNUSED_RECIPE',
     publish_requested:PUBLISH,
     date:DATE,
-    selected_hour_local:`${String(SELECTED_HOUR_VN).padStart(2,'0')}:00`,
     page:{ id:PAGE_ID, name:PAGE_NAME },
-    history:{ available:historyFetch.historyAvailable, scanned_posts:history.scannedPosts, used_recipe_ids:history.usedRecipeIds },
-    remaining_recipes:0,
+    state:{ used_count:usedIds.length, total:allRecipes.length, remaining:0, source:path.relative(process.cwd(),STATE_JSON) },
     published:null
   };
-  fs.writeFileSync(path.join(outDir, `${DATE}-result.json`), JSON.stringify(result,null,2), 'utf8');
+  fs.writeFileSync(path.join(outDir, `${DATE}-result.json`), JSON.stringify(result,null,2),'utf8');
   console.log('CLOUD_FOOD_RESULT='+JSON.stringify(result));
   process.exit(0);
 }
@@ -342,11 +419,11 @@ if (allRecipes.every(r => usedSet.has(r.id))) {
 const recipe = pickRecipeForPage({
   pageSlot:PAGE_SLOT,
   date:DATE,
-  usedRecipeIds:history.usedRecipeIds
+  usedRecipeIds:usedIds
 });
 
 if (!recipe || usedSet.has(Number(recipe.id))) {
-  throw new Error('Không chọn được món mới chưa từng đăng; dừng để tránh đăng trùng');
+  throw new Error('Không chọn được món mới chưa dùng trong recipe state');
 }
 
 const rendered = buildRecipePost({ page:{...page,name:PAGE_NAME}, recipe });
@@ -361,6 +438,15 @@ let status = 'DRY_RUN';
 
 if (PUBLISH) {
   published = await publishPhoto(image.path, caption);
+  const postId = String(published?.post_id || published?.id || '');
+  markRecipeUsed(state, recipe.id, {
+    date:DATE,
+    postId:postId || null,
+    postedAt:new Date().toISOString()
+  });
+  state.last_post_date = DATE;
+  state.last_post_id = postId || null;
+  saveRecipeState(state);
   status = 'PUBLISHED';
 }
 
@@ -372,17 +458,23 @@ const result = {
   trigger_hour_local:TRIGGER_HOUR_VN == null ? null : `${String(TRIGGER_HOUR_VN).padStart(2,'0')}:00`,
   page:{ id:PAGE_ID, name:PAGE_NAME },
   recipe:{ id:recipe.id, title:recipe.title, marker:recipeMarker(recipe.id) },
-  history:{
-    available:historyFetch.historyAvailable,
-    scanned_posts:history.scannedPosts,
-    used_recipe_ids:history.usedRecipeIds,
-    used_count:history.usedRecipeIds.length,
-    remaining_before_post:allRecipes.length-history.usedRecipeIds.length
+  state:{
+    used_count:usedRecipeIds(state).length,
+    total:state.recipes.length,
+    remaining:state.recipes.length-usedRecipeIds(state).length,
+    source:path.relative(process.cwd(),STATE_JSON),
+    csv:path.relative(process.cwd(),STATE_CSV)
   },
-  image:{ path:image.path, has_public_domain_photo:Boolean(image.background), source:image.background?.sourceUrl || null, license:image.background?.license || null },
+  today_check:todayCheck,
+  image:{
+    path:image.path,
+    has_public_domain_photo:Boolean(image.background),
+    source:image.background?.sourceUrl || null,
+    license:image.background?.license || null
+  },
   published,
   caption_preview:caption.slice(0,700)
 };
 
-fs.writeFileSync(path.join(outDir, `${DATE}-result.json`), JSON.stringify(result,null,2), 'utf8');
+fs.writeFileSync(path.join(outDir, `${DATE}-result.json`), JSON.stringify(result,null,2),'utf8');
 console.log('CLOUD_FOOD_RESULT='+JSON.stringify(result));
