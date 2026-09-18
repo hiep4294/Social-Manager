@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import sharp from 'sharp';
 import { foodPageBlueprints, pickRecipeForPage, buildRecipePost, localDateInVietnam } from '../src/food-network-core.js';
@@ -11,8 +12,39 @@ const GRAPH_VERSION = String(process.env.META_GRAPH_VERSION || 'v26.0').trim();
 const PUBLISH = String(process.env.CLOUD_FOOD_PUBLISH || 'false').toLowerCase() === 'true';
 const DATE = String(process.env.FOOD_DATE || localDateInVietnam()).trim();
 const outDir = path.resolve(process.cwd(), 'artifacts', 'cloud-food');
+const TRIGGER_CRON = String(process.env.CLOUD_TRIGGER_CRON || '').trim();
+
+function selectedPostingHourVN(date) {
+  const digest = crypto.createHash('sha256')
+    .update(`${date}:${PAGE_ID}:daily-window-v1`)
+    .digest();
+  return 8 + (digest[0] % 6); // 08,09,10,11,12,13
+}
+
+function triggerHourVN(cron) {
+  const m = String(cron || '').match(/^0\s+([1-6])\s+\*\s+\*\s+\*$/);
+  return m ? Number(m[1]) + 7 : null;
+}
+
+const SELECTED_HOUR_VN = selectedPostingHourVN(DATE);
+const TRIGGER_HOUR_VN = triggerHourVN(TRIGGER_CRON);
+const SCHEDULE_EVENT = Boolean(TRIGGER_CRON);
 
 fs.mkdirSync(outDir, { recursive: true });
+
+if (SCHEDULE_EVENT && TRIGGER_HOUR_VN !== SELECTED_HOUR_VN) {
+  const result = {
+    status:'NOT_DUE',
+    date:DATE,
+    page:{ id:PAGE_ID, name:PAGE_NAME },
+    selected_hour_local:`${String(SELECTED_HOUR_VN).padStart(2,'0')}:00`,
+    trigger_hour_local:TRIGGER_HOUR_VN == null ? null : `${String(TRIGGER_HOUR_VN).padStart(2,'0')}:00`,
+    publish_requested:PUBLISH
+  };
+  fs.writeFileSync(path.join(outDir, `${DATE}-not-due.json`), JSON.stringify(result,null,2), 'utf8');
+  console.log('CLOUD_FOOD_RESULT='+JSON.stringify(result));
+  process.exit(0);
+}
 
 function xml(value = '') {
   return String(value)
@@ -226,6 +258,8 @@ const result = {
   status,
   publish_requested:PUBLISH,
   date:DATE,
+  selected_hour_local:`${String(SELECTED_HOUR_VN).padStart(2,'0')}:00`,
+  trigger_hour_local:TRIGGER_HOUR_VN == null ? null : `${String(TRIGGER_HOUR_VN).padStart(2,'0')}:00`,
   page:{ id:PAGE_ID, name:PAGE_NAME },
   recipe:{ id:recipe.id, title:recipe.title },
   image:{ path:image.path, has_public_domain_photo:Boolean(image.background), source:image.background?.sourceUrl || null, license:image.background?.license || null },
