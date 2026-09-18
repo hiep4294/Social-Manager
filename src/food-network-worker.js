@@ -228,7 +228,14 @@ function writeStatus(db, statusPath) {
   const today = localDateInVietnam();
   const postCounts = Object.fromEntries(db.prepare('SELECT status,COUNT(*) n FROM food_network_daily WHERE date=? GROUP BY status').all(today).map(x => [x.status, Number(x.n)]));
   const nextPage = db.prepare("SELECT slot,name,planned_create_at,status FROM food_network_pages WHERE status='PLANNED' ORDER BY planned_create_at LIMIT 1").get() || null;
-  const activePages = db.prepare("SELECT slot,name,page_url,status FROM food_network_pages WHERE status='ACTIVE' ORDER BY slot").all();
+  const activePages = db.prepare("SELECT slot,name,page_url,status FROM food_network_pages WHERE status='ACTIVE' ORDER BY slot").all()
+    .map(row => {
+      const minute = pagePostMinute(row.slot);
+      return {
+        ...row,
+        daily_post_local: `${String(Math.floor(minute / 60)).padStart(2,'0')}:${String(minute % 60).padStart(2,'0')}`
+      };
+    });
   const createPagesEnabled = String(process.env.FOOD_NETWORK_CREATE_PAGES_ENABLED ?? 'false').toLowerCase() === 'true';
   try {
     fs.writeFileSync(statusPath, JSON.stringify({
