@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import sharp from 'sharp';
-import { foodPageBlueprints, pickRecipeForPage, buildRecipePost, localDateInVietnam } from '../src/food-network-core.js';
+import { foodPageBlueprints, foodRecipes, pickRecipeForPage, buildRecipePost, localDateInVietnam } from '../src/food-network-core.js';
 
 const PAGE_SLOT = 5;
 const PAGE_NAME = 'Hôm Nay Ăn Gì?';
@@ -67,6 +67,97 @@ function norm(value='') {
 
 function stripHtml(value='') {
   return String(value).replace(/<[^>]*>/g,' ').replace(/&[^;]+;/g,' ').replace(/\s+/g,' ').trim();
+}
+
+function recipeMarker(id) {
+  return `#RID${String(Number(id)).padStart(3,'0')}`;
+}
+
+function vietnamDateFromIso(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone:'Asia/Ho_Chi_Minh',
+    year:'numeric',
+    month:'2-digit',
+    day:'2-digit'
+  }).formatToParts(d);
+  const m = Object.fromEntries(parts.map(x => [x.type,x.value]));
+  return `${m.year}-${m.month}-${m.day}`;
+}
+
+async function fetchAllPagePosts() {
+  if (!TOKEN) {
+    if (PUBLISH) throw new Error('Thiếu FACEBOOK_PAGE_ACCESS_TOKEN nên không thể kiểm tra lịch sử chống trùng');
+    return { posts:[], historyAvailable:false };
+  }
+
+  const posts = [];
+  let after = '';
+  const maxPages = 500; // 50,000 posts at limit=100; stop instead of risking an accidental repeat.
+
+  for (let pageNo=0; pageNo<maxPages; pageNo += 1) {
+    const u = new URL(`https://graph.facebook.com/${GRAPH_VERSION}/${PAGE_ID}/posts`);
+    u.searchParams.set('fields','id,message,created_time');
+    u.searchParams.set('limit','100');
+    u.searchParams.set('access_token',TOKEN);
+    if (after) u.searchParams.set('after',after);
+
+    const r = await fetch(u);
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok || body?.error) {
+      throw new Error(body?.error?.message || `Không đọc được lịch sử Facebook Page HTTP ${r.status}`);
+    }
+
+    const batch = Array.isArray(body.data) ? body.data : [];
+    posts.push(...batch);
+
+    const nextAfter = String(body?.paging?.cursors?.after || '');
+    if (!body?.paging?.next || !nextAfter || nextAfter === after || batch.length === 0) {
+      return { posts, historyAvailable:true };
+    }
+    after = nextAfter;
+  }
+
+  throw new Error('Lịch sử Page vượt giới hạn quét an toàn; dừng đăng để tránh lặp món');
+}
+
+function analyzeHistory(posts) {
+  const recipes = foodRecipes();
+  const used = new Set();
+  let todayPosted = false;
+
+  for (const post of posts) {
+    const message = String(post?.message || '');
+    const normalizedMessage = norm(message);
+
+    for (const hit of message.matchAll(/#RID(\d{1,5})\b/gi)) {
+      const id = Number(hit[1]);
+      if (recipes.some(r => r.id === id)) used.add(id);
+    }
+
+    for (const recipe of recipes) {
+      const title = norm(recipe.title);
+      if (title && normalizedMessage.includes(title)) used.add(recipe.id);
+    }
+
+    const isAutomationRecipe = /#HomNayAnGi\b/i.test(message)
+      || /#RID\d{1,5}\b/i.test(message)
+      || recipes.some(r => {
+        const title = norm(r.title);
+        return title && normalizedMessage.includes(title);
+      });
+
+    if (isAutomationRecipe && vietnamDateFromIso(post?.created_time) === DATE) {
+      todayPosted = true;
+    }
+  }
+
+  return {
+    usedRecipeIds:[...used].sort((a,b)=>a-b),
+    todayPosted,
+    scannedPosts:posts.length
+  };
 }
 
 async function publicDomainFoodImage(title) {
@@ -192,30 +283,6 @@ async function buildImage(recipe) {
   return { path:out, background:null };
 }
 
-function vietnamDayBounds(date) {
-  const start = Date.parse(`${date}T00:00:00+07:00`) / 1000;
-  const end = Date.parse(`${date}T23:59:59+07:00`) / 1000;
-  return { start: Math.floor(start), end: Math.floor(end) };
-}
-
-async function alreadyPosted({ recipeTitle }) {
-  if (!TOKEN) return false;
-  const { start, end } = vietnamDayBounds(DATE);
-  const u = new URL(`https://graph.facebook.com/${GRAPH_VERSION}/${PAGE_ID}/posts`);
-  u.searchParams.set('fields','id,message,created_time');
-  u.searchParams.set('since',String(start));
-  u.searchParams.set('until',String(end));
-  u.searchParams.set('limit','25');
-  u.searchParams.set('access_token',TOKEN);
-  const r = await fetch(u);
-  const body = await r.json().catch(()=>({}));
-  if (!r.ok || body?.error) return false;
-  return (body.data || []).some(p =>
-    String(p.message || '').includes(recipeTitle) &&
-    String(p.message || '').includes('#HomNayAnGi')
-  );
-}
-
 async function publishPhoto(file, caption) {
   if (!TOKEN) throw new Error('Thiếu FACEBOOK_PAGE_ACCESS_TOKEN');
   const buf = fs.readFileSync(file);
@@ -235,21 +302,64 @@ async function publishPhoto(file, caption) {
 const page = foodPageBlueprints().find(x => x.slot === PAGE_SLOT);
 if (!page) throw new Error('Không tìm thấy blueprint Hôm Nay Ăn Gì?');
 
-const recipe = pickRecipeForPage({ pageSlot:PAGE_SLOT, date:DATE, usedRecipeIds:[] });
+const historyFetch = await fetchAllPagePosts();
+const history = analyzeHistory(historyFetch.posts);
+
+if (history.todayPosted) {
+  const result = {
+    status:'ALREADY_POSTED_TODAY',
+    publish_requested:PUBLISH,
+    date:DATE,
+    selected_hour_local:`${String(SELECTED_HOUR_VN).padStart(2,'0')}:00`,
+    trigger_hour_local:TRIGGER_HOUR_VN == null ? null : `${String(TRIGGER_HOUR_VN).padStart(2,'0')}:00`,
+    page:{ id:PAGE_ID, name:PAGE_NAME },
+    history:{ available:historyFetch.historyAvailable, scanned_posts:history.scannedPosts, used_recipe_ids:history.usedRecipeIds },
+    published:null
+  };
+  fs.writeFileSync(path.join(outDir, `${DATE}-result.json`), JSON.stringify(result,null,2), 'utf8');
+  console.log('CLOUD_FOOD_RESULT='+JSON.stringify(result));
+  process.exit(0);
+}
+
+const allRecipes = foodRecipes();
+const usedSet = new Set(history.usedRecipeIds.map(Number));
+if (allRecipes.every(r => usedSet.has(r.id))) {
+  const result = {
+    status:'NO_UNUSED_RECIPE',
+    publish_requested:PUBLISH,
+    date:DATE,
+    selected_hour_local:`${String(SELECTED_HOUR_VN).padStart(2,'0')}:00`,
+    page:{ id:PAGE_ID, name:PAGE_NAME },
+    history:{ available:historyFetch.historyAvailable, scanned_posts:history.scannedPosts, used_recipe_ids:history.usedRecipeIds },
+    remaining_recipes:0,
+    published:null
+  };
+  fs.writeFileSync(path.join(outDir, `${DATE}-result.json`), JSON.stringify(result,null,2), 'utf8');
+  console.log('CLOUD_FOOD_RESULT='+JSON.stringify(result));
+  process.exit(0);
+}
+
+const recipe = pickRecipeForPage({
+  pageSlot:PAGE_SLOT,
+  date:DATE,
+  usedRecipeIds:history.usedRecipeIds
+});
+
+if (!recipe || usedSet.has(Number(recipe.id))) {
+  throw new Error('Không chọn được món mới chưa từng đăng; dừng để tránh đăng trùng');
+}
+
 const rendered = buildRecipePost({ page:{...page,name:PAGE_NAME}, recipe });
 const image = await buildImage(recipe);
-let caption = `${rendered.content}\n\n#HomNayAnGi`;
+let caption = `${rendered.content}\n\n#HomNayAnGi ${recipeMarker(recipe.id)}`;
 if (image.background) {
   caption += `\n\nẢnh nền: Wikimedia Commons (${image.background.license}).`;
 }
 
-const duplicate = await alreadyPosted({ recipeTitle:recipe.title });
 let published = null;
 let status = 'DRY_RUN';
 
-if (duplicate) {
-  status = 'ALREADY_POSTED';
-} else if (PUBLISH) {
+if (PUBLISH) {
   published = await publishPhoto(image.path, caption);
   status = 'PUBLISHED';
 }
@@ -261,9 +371,15 @@ const result = {
   selected_hour_local:`${String(SELECTED_HOUR_VN).padStart(2,'0')}:00`,
   trigger_hour_local:TRIGGER_HOUR_VN == null ? null : `${String(TRIGGER_HOUR_VN).padStart(2,'0')}:00`,
   page:{ id:PAGE_ID, name:PAGE_NAME },
-  recipe:{ id:recipe.id, title:recipe.title },
+  recipe:{ id:recipe.id, title:recipe.title, marker:recipeMarker(recipe.id) },
+  history:{
+    available:historyFetch.historyAvailable,
+    scanned_posts:history.scannedPosts,
+    used_recipe_ids:history.usedRecipeIds,
+    used_count:history.usedRecipeIds.length,
+    remaining_before_post:allRecipes.length-history.usedRecipeIds.length
+  },
   image:{ path:image.path, has_public_domain_photo:Boolean(image.background), source:image.background?.sourceUrl || null, license:image.background?.license || null },
-  duplicate,
   published,
   caption_preview:caption.slice(0,700)
 };
