@@ -229,24 +229,36 @@ try {
     result.edit.edit_url=page.url();
 
     // Exact selector confirmed by live DOM probe: role=button, aria-label="Chỉnh sửa tiểu sử".
-    const bioButton=page.getByRole('button',{name:/^chỉnh sửa tiểu sử$|^edit bio$/i}).first();
-    const bioVisible=await bioButton.isVisible({timeout:2500}).catch(()=>false);
-    result.edit.bio_click={ok:bioVisible,selector:'role=button aria=Chỉnh sửa tiểu sử'};
+    const editPageText=clean(await page.locator('body').innerText().catch(()=>'' ));
+    if(editPageText.includes(bio)){
+      result.edit.bio_status='ALREADY_EXISTS';
+    } else {
+      const bioButton=page.getByRole('button',{name:/^chỉnh sửa tiểu sử$|^edit bio$/i}).first();
+      const bioVisible=await bioButton.isVisible({timeout:2500}).catch(()=>false);
+      result.edit.bio_click={ok:bioVisible,selector:'role=button aria=Chỉnh sửa tiểu sử'};
 
-    if(bioVisible){
-      await bioButton.click({timeout:3000});
-      await sleep(900);
-      result.edit.bio_controls_before_fill=await visibleControls(page,30);
-      if(await fillOpenEditor(page,bio)){
-        const saved=await saveOpenEditor(page);
-        if(saved){
-          result.edit.changed.push('bio');
-          await sleep(1200);
+      if(bioVisible){
+        await bioButton.click({timeout:3000});
+        await sleep(900);
+        result.edit.bio_controls_before_fill=await visibleControls(page,30);
+        if(await fillOpenEditor(page,bio)){
+          const saved=await saveOpenEditor(page);
+          if(saved){
+            result.edit.changed.push('bio');
+            result.edit.bio_status='DONE';
+            await sleep(1200);
+          } else {
+            // If the value is already present and Facebook disables/hides Save, treat it as idempotent success.
+            const editorValue=clean(await page.locator('[role="dialog"] [role="textbox"],[role="dialog"] textarea,[role="dialog"] [contenteditable="true"]').last().innerText().catch(()=>'' ));
+            if(editorValue.includes(bio)){
+              result.edit.bio_status='ALREADY_EXISTS';
+            } else {
+              result.edit.bio_save='NOT_FOUND';
+            }
+          }
         } else {
-          result.edit.bio_save='NOT_FOUND';
+          result.edit.bio_editor='NOT_FOUND';
         }
-      } else {
-        result.edit.bio_editor='NOT_FOUND';
       }
     }
 
@@ -264,7 +276,7 @@ try {
     }
 
     result.edit.controls=await visibleControls(page,40);
-    result.edit.status=result.edit.changed.length ? 'DONE' : 'NEEDS_REVIEW';
+    result.edit.status=(result.edit.changed.length || result.edit.bio_status==='ALREADY_EXISTS') ? 'DONE' : 'NEEDS_REVIEW';
   } else {
     result.edit.status='NEEDS_REVIEW';
     result.edit.controls=await visibleControls(page,40);
@@ -320,8 +332,28 @@ try {
 
         await sleep(1400);
 
+        // Current Facebook flow is two-step: enter text -> "Tiếp" -> "Đăng".
+        let nextButton=dialog.getByRole('button',{name:/^(Tiếp|Next)$/i}).last();
+        if(!(await nextButton.isVisible({timeout:2500}).catch(()=>false))){
+          nextButton=page.getByRole('button',{name:/^(Tiếp|Next)$/i}).last();
+        }
+
+        result.post.next_button_visible=await nextButton.isVisible({timeout:2500}).catch(()=>false);
+        if(result.post.next_button_visible){
+          for(let i=0;i<8;i++){
+            result.post.next_button_enabled=await nextButton.isEnabled().catch(()=>false);
+            if(result.post.next_button_enabled) break;
+            await sleep(500);
+          }
+          if(result.post.next_button_enabled){
+            await nextButton.click({timeout:4000});
+            await sleep(2200);
+            dialog=page.locator('[role="dialog"]').last();
+          }
+        }
+
         let postButton=dialog.getByRole('button',{name:/^(Đăng|Post)$/i}).last();
-        if(!(await postButton.isVisible({timeout:3000}).catch(()=>false))){
+        if(!(await postButton.isVisible({timeout:3500}).catch(()=>false))){
           postButton=page.getByRole('button',{name:/^(Đăng|Post)$/i}).last();
         }
 
@@ -330,12 +362,8 @@ try {
           ? await postButton.isEnabled().catch(()=>false)
           : false;
 
-        if(result.post.post_button_visible){
-          if(!result.post.post_button_enabled){
-            await postButton.waitFor({state:'visible',timeout:3000}).catch(()=>{});
-            await sleep(800);
-          }
-          await postButton.click({timeout:4000}).catch(()=>{});
+        if(result.post.post_button_visible && result.post.post_button_enabled){
+          await postButton.click({timeout:4000});
           await sleep(5000);
           await checkpoint(page);
 
@@ -347,7 +375,8 @@ try {
           result.post.status=result.post.verified ? 'DONE' : 'NEEDS_REVIEW';
         } else {
           result.post.status='NEEDS_REVIEW';
-          result.post.controls=await visibleControls(page,60);
+          result.post.dialog_text=clean(await dialog.innerText().catch(()=>'' )).slice(0,1800);
+          result.post.controls=await visibleControls(page,80);
         }
       } else {
         result.post.editor_found=false;
