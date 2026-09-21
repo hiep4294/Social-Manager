@@ -6,7 +6,7 @@ import { foodPageBlueprints, foodRecipes, pickRecipeForPage, buildRecipePost, lo
 
 const PAGE_SLOT = 5;
 const PAGE_NAME = 'Hôm Nay Ăn Gì?';
-const PAGE_ID = String(process.env.FACEBOOK_PAGE_ID || '61594459680780').trim();
+const PAGE_ID = String(process.env.FACEBOOK_PAGE_ID || '1358329424025816').trim();
 const TOKEN = String(process.env.FACEBOOK_PAGE_ACCESS_TOKEN || '').trim();
 const GRAPH_VERSION = String(process.env.META_GRAPH_VERSION || 'v26.0').trim();
 const PUBLISH = String(process.env.CLOUD_FOOD_PUBLISH || 'false').toLowerCase() === 'true';
