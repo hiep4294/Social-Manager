@@ -2,8 +2,9 @@
   "version": 1,
   "page_id": "1358329424025816",
   "page_name": "Hôm Nay Ăn Gì?",
-  "updated_at": null,
-  "last_post_date": null,
+  "updated_at": "2026-09-21T04:52:02.615Z",
+  "last_post_date": "2026-09-21",
+  "last_post_id": "1358329424025816_122103970515481989",
   "notes": "Authoritative recipe usage state. used=true means never select this recipe again unless manually reset.",
   "recipes": [
     {
@@ -28,10 +29,10 @@
       "id": 3,
       "title": "Gà rang gừng",
       "category": "gia_dinh",
-      "used": false,
-      "posted_date": null,
-      "posted_at": null,
-      "facebook_post_id": null
+      "used": true,
+      "posted_date": "2026-09-21",
+      "posted_at": "2026-09-21T04:52:02.614Z",
+      "facebook_post_id": "1358329424025816_122103970515481989"
     },
     {
       "id": 4,
