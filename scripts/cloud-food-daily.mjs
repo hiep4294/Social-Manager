@@ -7,7 +7,7 @@ import { foodPageBlueprints, foodRecipes, pickRecipeForPage, buildRecipePost, lo
 const PAGE_SLOT = 5;
 const PAGE_NAME = 'Hôm Nay Ăn Gì?';
 const PAGE_ID = String(process.env.FACEBOOK_PAGE_ID || '1358329424025816').trim();
-const TOKEN = String(process.env.FACEBOOK_PAGE_ACCESS_TOKEN || '').trim();
+let TOKEN = String(process.env.FACEBOOK_PAGE_ACCESS_TOKEN || '').trim();
 const GRAPH_VERSION = String(process.env.META_GRAPH_VERSION || 'v26.0').trim();
 const PUBLISH = String(process.env.CLOUD_FOOD_PUBLISH || 'false').toLowerCase() === 'true';
 const DATE = String(process.env.FOOD_DATE || localDateInVietnam()).trim();
@@ -162,6 +162,40 @@ function vietnamDayBounds(date) {
     start:Math.floor(Date.parse(`${date}T00:00:00+07:00`) / 1000),
     end:Math.floor(Date.parse(`${date}T23:59:59+07:00`) / 1000)
   };
+}
+
+async function resolvePageAccessToken(sourceToken) {
+  const token = String(sourceToken || '').trim();
+  if (!token) return '';
+
+  async function graph(pathname) {
+    const r = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${pathname}`, {
+      headers:{ Authorization:`Bearer ${token}` }
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok || body?.error) {
+      const code = body?.error?.code ?? 'unknown';
+      throw new Error(`Không xác minh được Meta token, code=${code}`);
+    }
+    return body;
+  }
+
+  const me = await graph('me?fields=id,name');
+  if (String(me.id) === PAGE_ID) {
+    console.log('META_TOKEN_TYPE=PAGE');
+    return token;
+  }
+
+  console.log('META_TOKEN_TYPE=USER');
+  const accounts = await graph('me/accounts?fields=id,name,access_token&limit=100');
+  const target = (accounts.data || []).find(x => String(x?.id || '') === PAGE_ID);
+
+  if (!target?.access_token) {
+    throw new Error(`User token không cấp được Page token cho PAGE_ID=${PAGE_ID}`);
+  }
+
+  console.log(`META_TARGET_PAGE_RESOLVED=${target.id} ${target.name || ''}`);
+  return String(target.access_token).trim();
 }
 
 async function checkTodayRecentPosts() {
@@ -367,6 +401,10 @@ if (state.last_post_date === DATE) {
   fs.writeFileSync(path.join(outDir, `${DATE}-result.json`), JSON.stringify(result,null,2),'utf8');
   console.log('CLOUD_FOOD_RESULT='+JSON.stringify(result));
   process.exit(0);
+}
+
+if (TOKEN) {
+  TOKEN = await resolvePageAccessToken(TOKEN);
 }
 
 // Small recovery check only for today's recent posts. No full Page-history scan.
