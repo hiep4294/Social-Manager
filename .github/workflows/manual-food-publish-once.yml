@@ -1,4 +1,4 @@
-# Fresh run after FACEBOOK_PAGE_ACCESS_TOKEN update
+# Resolve Page token from stored Meta token, then publish once
 name: Manual Food Publish Once
 
 on:
@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 12
     env:
       FACEBOOK_PAGE_ID: '1358329424025816'
-      FACEBOOK_PAGE_ACCESS_TOKEN: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+      META_SOURCE_ACCESS_TOKEN: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
       META_GRAPH_VERSION: ${{ vars.META_GRAPH_VERSION || 'v26.0' }}
       CLOUD_FOOD_PUBLISH: 'true'
 
@@ -34,35 +34,102 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Verify secret is present
+      - name: Verify stored Meta secret is present
         shell: bash
         run: |
-          if [ -z "$FACEBOOK_PAGE_ACCESS_TOKEN" ]; then
+          if [ -z "$META_SOURCE_ACCESS_TOKEN" ]; then
             echo "SECRET_PRESENT=NO"
             exit 1
           fi
           echo "SECRET_PRESENT=YES"
 
-      - name: Validate token belongs to target Page
+      - name: Resolve target Page token securely
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+
+          const targetPageId = process.env.FACEBOOK_PAGE_ID;
+          const sourceToken = process.env.META_SOURCE_ACCESS_TOKEN;
+          const version = process.env.META_GRAPH_VERSION || 'v26.0';
+
+          async function graph(path) {
+            const url = `https://graph.facebook.com/${version}/${path}`;
+            const res = await fetch(url, {
+              headers: { Authorization: `Bearer ${sourceToken}` }
+            });
+            const body = await res.json();
+            if (!res.ok) {
+              console.error('GRAPH_REQUEST=FAILED');
+              console.error('GRAPH_ERROR_CODE=' + (body?.error?.code ?? 'unknown'));
+              process.exit(1);
+            }
+            return body;
+          }
+
+          const me = await graph('me?fields=id,name');
+
+          let pageToken = null;
+
+          if (String(me.id) === String(targetPageId)) {
+            pageToken = sourceToken;
+            console.log('SOURCE_TOKEN_TYPE=PAGE');
+          } else {
+            console.log('SOURCE_TOKEN_TYPE=USER');
+            console.log('SOURCE_USER_ID=' + me.id);
+
+            const accounts = await graph('me/accounts?fields=id,name,access_token&limit=100');
+            const target = (accounts.data || []).find(
+              p => String(p.id) === String(targetPageId)
+            );
+
+            if (!target || !target.access_token) {
+              console.error('TARGET_PAGE_FOUND=NO');
+              process.exit(1);
+            }
+
+            pageToken = target.access_token;
+            console.log('TARGET_PAGE_FOUND=YES');
+            console.log('TARGET_PAGE_ID=' + target.id);
+            console.log('TARGET_PAGE_NAME=' + target.name);
+          }
+
+          console.log('::add-mask::' + pageToken);
+          fs.appendFileSync(
+            process.env.GITHUB_ENV,
+            'FACEBOOK_PAGE_ACCESS_TOKEN=' + pageToken + '\n'
+          );
+
+          console.log('PAGE_TOKEN_RESOLVED=YES');
+          console.log('TOKEN_VALUE_PRINTED=NO');
+          NODE
+
+      - name: Validate resolved token belongs to target Page
         shell: bash
         run: |
           node - <<'NODE'
           const pageId = process.env.FACEBOOK_PAGE_ID;
           const token = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
           const version = process.env.META_GRAPH_VERSION || 'v26.0';
+
           const url = `https://graph.facebook.com/${version}/me?fields=id,name`;
-          const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+          const res = await fetch(url, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
           const body = await res.json();
+
           if (!res.ok) {
             console.error('PAGE_TOKEN_VALIDATION=FAILED');
             console.error('GRAPH_ERROR_CODE=' + (body?.error?.code ?? 'unknown'));
             process.exit(1);
           }
+
           if (String(body.id) !== String(pageId)) {
             console.error('PAGE_TOKEN_MATCH=NO');
             console.error('RETURNED_PAGE_ID=' + String(body.id || ''));
             process.exit(1);
           }
+
           console.log('PAGE_TOKEN_VALIDATION=OK');
           console.log('PAGE_TOKEN_MATCH=YES');
           console.log('PAGE_ID=' + body.id);
