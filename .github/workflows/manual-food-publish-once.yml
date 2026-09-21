@@ -49,59 +49,65 @@ jobs:
           node - <<'NODE'
           const fs = require('fs');
 
-          const targetPageId = process.env.FACEBOOK_PAGE_ID;
-          const sourceToken = process.env.META_SOURCE_ACCESS_TOKEN;
-          const version = process.env.META_GRAPH_VERSION || 'v26.0';
+          (async () => {
+            const targetPageId = process.env.FACEBOOK_PAGE_ID;
+            const sourceToken = process.env.META_SOURCE_ACCESS_TOKEN;
+            const version = process.env.META_GRAPH_VERSION || 'v26.0';
 
-          async function graph(path) {
-            const url = `https://graph.facebook.com/${version}/${path}`;
-            const res = await fetch(url, {
-              headers: { Authorization: `Bearer ${sourceToken}` }
-            });
-            const body = await res.json();
-            if (!res.ok) {
-              console.error('GRAPH_REQUEST=FAILED');
-              console.error('GRAPH_ERROR_CODE=' + (body?.error?.code ?? 'unknown'));
-              process.exit(1);
+            async function graph(path) {
+              const url = `https://graph.facebook.com/${version}/${path}`;
+              const res = await fetch(url, {
+                headers: { Authorization: `Bearer ${sourceToken}` }
+              });
+              const body = await res.json();
+              if (!res.ok) {
+                console.error('GRAPH_REQUEST=FAILED');
+                console.error('GRAPH_ERROR_CODE=' + (body?.error?.code ?? 'unknown'));
+                process.exit(1);
+              }
+              return body;
             }
-            return body;
-          }
 
-          const me = await graph('me?fields=id,name');
+            const me = await graph('me?fields=id,name');
 
-          let pageToken = null;
+            let pageToken = null;
 
-          if (String(me.id) === String(targetPageId)) {
-            pageToken = sourceToken;
-            console.log('SOURCE_TOKEN_TYPE=PAGE');
-          } else {
-            console.log('SOURCE_TOKEN_TYPE=USER');
-            console.log('SOURCE_USER_ID=' + me.id);
+            if (String(me.id) === String(targetPageId)) {
+              pageToken = sourceToken;
+              console.log('SOURCE_TOKEN_TYPE=PAGE');
+            } else {
+              console.log('SOURCE_TOKEN_TYPE=USER');
+              console.log('SOURCE_USER_ID=' + me.id);
 
-            const accounts = await graph('me/accounts?fields=id,name,access_token&limit=100');
-            const target = (accounts.data || []).find(
-              p => String(p.id) === String(targetPageId)
+              const accounts = await graph('me/accounts?fields=id,name,access_token&limit=100');
+              const target = (accounts.data || []).find(
+                p => String(p.id) === String(targetPageId)
+              );
+
+              if (!target || !target.access_token) {
+                console.error('TARGET_PAGE_FOUND=NO');
+                process.exit(1);
+              }
+
+              pageToken = target.access_token;
+              console.log('TARGET_PAGE_FOUND=YES');
+              console.log('TARGET_PAGE_ID=' + target.id);
+              console.log('TARGET_PAGE_NAME=' + target.name);
+            }
+
+            console.log('::add-mask::' + pageToken);
+            fs.appendFileSync(
+              process.env.GITHUB_ENV,
+              'FACEBOOK_PAGE_ACCESS_TOKEN=' + pageToken + '\n'
             );
 
-            if (!target || !target.access_token) {
-              console.error('TARGET_PAGE_FOUND=NO');
-              process.exit(1);
-            }
-
-            pageToken = target.access_token;
-            console.log('TARGET_PAGE_FOUND=YES');
-            console.log('TARGET_PAGE_ID=' + target.id);
-            console.log('TARGET_PAGE_NAME=' + target.name);
-          }
-
-          console.log('::add-mask::' + pageToken);
-          fs.appendFileSync(
-            process.env.GITHUB_ENV,
-            'FACEBOOK_PAGE_ACCESS_TOKEN=' + pageToken + '\n'
-          );
-
-          console.log('PAGE_TOKEN_RESOLVED=YES');
-          console.log('TOKEN_VALUE_PRINTED=NO');
+            console.log('PAGE_TOKEN_RESOLVED=YES');
+            console.log('TOKEN_VALUE_PRINTED=NO');
+          })().catch(err => {
+            console.error('PAGE_TOKEN_RESOLUTION=FAILED');
+            console.error('ERROR_NAME=' + (err?.name || 'Error'));
+            process.exit(1);
+          });
           NODE
 
       - name: Validate resolved token belongs to target Page
