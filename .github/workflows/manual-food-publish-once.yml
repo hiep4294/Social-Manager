@@ -1,0 +1,66 @@
+name: One-shot Food Publish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/manual-food-publish-once.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: manual-food-publish-once
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      FACEBOOK_PAGE_ID: '61594459680780'
+      FACEBOOK_PAGE_ACCESS_TOKEN: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+      META_GRAPH_VERSION: ${{ vars.META_GRAPH_VERSION || 'v26.0' }}
+      CLOUD_FOOD_PUBLISH: 'true'
+
+    steps:
+      - name: Checkout stable
+        uses: actions/checkout@v4
+        with:
+          ref: stable
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Publish one daily food post
+        run: node scripts/cloud-food-daily.mjs
+
+      - name: Persist recipe usage state
+        if: success()
+        shell: bash
+        run: |
+          set -e
+          git config user.name "social-manager-bot"
+          git config user.email "social-manager-bot@users.noreply.github.com"
+          git add content/hom-nay-an-gi-recipe-state.json content/hom-nay-an-gi-recipe-state.csv
+          if git diff --cached --quiet; then
+            echo "No recipe state changes."
+            exit 0
+          fi
+          git commit -m "Update Hôm Nay Ăn Gì recipe state"
+          git pull --rebase origin stable
+          git push origin HEAD:stable
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: manual-food-publish-${{ github.run_id }}
+          path: artifacts/cloud-food/
+          if-no-files-found: warn
+          retention-days: 7
