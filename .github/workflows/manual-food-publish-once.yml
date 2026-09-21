@@ -1,0 +1,100 @@
+name: Manual Food Publish Once
+
+on:
+  push:
+    paths:
+      - '.github/workflows/manual-food-publish-once.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-food-page-cloud
+  cancel-in-progress: false
+
+jobs:
+  publish-once:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      FACEBOOK_PAGE_ID: '1358329424025816'
+      FACEBOOK_PAGE_ACCESS_TOKEN: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+      META_GRAPH_VERSION: ${{ vars.META_GRAPH_VERSION || 'v26.0' }}
+      CLOUD_FOOD_PUBLISH: 'true'
+
+    steps:
+      - name: Checkout stable automation branch
+        uses: actions/checkout@v4
+        with:
+          ref: stable
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify secret is present
+        shell: bash
+        run: |
+          if [ -z "$FACEBOOK_PAGE_ACCESS_TOKEN" ]; then
+            echo "SECRET_PRESENT=NO"
+            exit 1
+          fi
+          echo "SECRET_PRESENT=YES"
+
+      - name: Validate token belongs to target Page
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const pageId = process.env.FACEBOOK_PAGE_ID;
+          const token = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
+          const version = process.env.META_GRAPH_VERSION || 'v26.0';
+          const url = `https://graph.facebook.com/${version}/me?fields=id,name`;
+          const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+          const body = await res.json();
+          if (!res.ok) {
+            console.error('PAGE_TOKEN_VALIDATION=FAILED');
+            console.error('GRAPH_ERROR_CODE=' + (body?.error?.code ?? 'unknown'));
+            process.exit(1);
+          }
+          if (String(body.id) !== String(pageId)) {
+            console.error('PAGE_TOKEN_MATCH=NO');
+            console.error('RETURNED_PAGE_ID=' + String(body.id || ''));
+            process.exit(1);
+          }
+          console.log('PAGE_TOKEN_VALIDATION=OK');
+          console.log('PAGE_TOKEN_MATCH=YES');
+          console.log('PAGE_ID=' + body.id);
+          console.log('PAGE_NAME=' + body.name);
+          NODE
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Publish one food post
+        run: node scripts/cloud-food-daily.mjs
+
+      - name: Persist recipe usage state
+        if: always()
+        shell: bash
+        run: |
+          set -e
+          git config user.name "social-manager-bot"
+          git config user.email "social-manager-bot@users.noreply.github.com"
+          git add content/hom-nay-an-gi-recipe-state.json content/hom-nay-an-gi-recipe-state.csv
+          if git diff --cached --quiet; then
+            echo "No recipe state changes."
+            exit 0
+          fi
+          git commit -m "Update Hôm Nay Ăn Gì recipe state"
+          git pull --rebase origin stable
+          git push origin HEAD:stable
+
+      - name: Upload generated image and log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: manual-food-${{ github.run_id }}
+          path: artifacts/cloud-food/
+          if-no-files-found: warn
+          retention-days: 30
