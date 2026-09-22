@@ -56,7 +56,7 @@ async function saveChatGptImage({ sourceUrl, foodId, dataUrl }) {
   try {
     loaded = dataUrl ? dataUrlToBytes(dataUrl) : await fetchImageBytes(sourceUrl);
   } catch (error) {
-    if (error?.needsPageFetch) return { ok: false, needs_page_fetch: true, error: error.message };
+    if (!dataUrl) return { ok: false, needs_page_fetch: true, error: String(error?.message || error) };
     throw error;
   }
   const result = await importChatGptImage({
