@@ -7,7 +7,7 @@ import { foodPageBlueprints, foodRecipes, pickRecipeForPage, buildRecipePost, lo
 const PAGE_SLOT = 5;
 const PAGE_NAME = 'Hôm Nay Ăn Gì?';
 const PAGE_ID = String(process.env.FACEBOOK_PAGE_ID || '1358329424025816').trim();
-let TOKEN = String(process.env.FACEBOOK_PAGE_ACCESS_TOKEN || '').trim();
+let TOKEN = String(process.env.META_ACCESS_TOKEN || process.env.FACEBOOK_PAGE_ACCESS_TOKEN || '').trim();
 const GRAPH_VERSION = String(process.env.META_GRAPH_VERSION || 'v26.0').trim();
 const PUBLISH = String(process.env.CLOUD_FOOD_PUBLISH || 'false').toLowerCase() === 'true';
 const DATE = String(process.env.FOOD_DATE || localDateInVietnam()).trim();
@@ -186,12 +186,12 @@ async function resolvePageAccessToken(sourceToken) {
     return token;
   }
 
-  console.log('META_TOKEN_TYPE=USER');
+  console.log('META_TOKEN_TYPE=USER_OR_SYSTEM_USER');
   const accounts = await graph('me/accounts?fields=id,name,access_token&limit=100');
   const target = (accounts.data || []).find(x => String(x?.id || '') === PAGE_ID);
 
   if (!target?.access_token) {
-    throw new Error(`User token không cấp được Page token cho PAGE_ID=${PAGE_ID}`);
+    throw new Error(`Token nguồn không cấp được Page token cho PAGE_ID=${PAGE_ID}; kiểm tra System User/User đã được gán Page và quyền Pages`);
   }
 
   console.log(`META_TARGET_PAGE_RESOLVED=${target.id} ${target.name || ''}`);
@@ -200,7 +200,7 @@ async function resolvePageAccessToken(sourceToken) {
 
 async function checkTodayRecentPosts() {
   if (!TOKEN) {
-    if (PUBLISH) throw new Error('Thiếu FACEBOOK_PAGE_ACCESS_TOKEN nên không thể kiểm tra chống đăng trùng trong ngày');
+    if (PUBLISH) throw new Error('Thiếu META_ACCESS_TOKEN/FACEBOOK_PAGE_ACCESS_TOKEN nên không thể kiểm tra chống đăng trùng trong ngày');
     return { found:false, checked:false };
   }
 
@@ -367,7 +367,7 @@ async function buildImage(recipe) {
 }
 
 async function publishPhoto(file, caption) {
-  if (!TOKEN) throw new Error('Thiếu FACEBOOK_PAGE_ACCESS_TOKEN');
+  if (!TOKEN) throw new Error('Thiếu META_ACCESS_TOKEN/FACEBOOK_PAGE_ACCESS_TOKEN');
   const buf = fs.readFileSync(file);
   const form = new FormData();
   form.set('access_token', TOKEN);
