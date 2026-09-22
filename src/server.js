@@ -12,6 +12,8 @@ import { publishFacebook } from './platforms/facebook.js';
 import { publishInstagram } from './platforms/instagram.js';
 import { encryptSecret, decryptSecret } from './security.js';
 import { buildMetaAuthUrl, exchangeMetaCode, listMetaPages, metaRedirectUri, metaScopes } from './meta-oauth.js';
+import { createChatGptImageStore } from './chatgpt-image-store.js';
+import { buildFoodLibrary, foodCategories } from './food-library-core.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,6 +26,7 @@ fs.mkdirSync(uploadDir, { recursive: true });
 const db = new Database(path.join(dataDir, 'social-manager.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+const chatGptImageStore = createChatGptImageStore({ db, root });
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS brand (
@@ -174,6 +177,61 @@ function auth(req, res, next) {
   if (req.session?.user) return next();
   res.status(401).json({ error: 'UNAUTHORIZED' });
 }
+
+const foodImageRaw = express.raw({
+  type: ['image/png', 'image/jpeg', 'image/webp', 'image/avif'],
+  limit: '25mb'
+});
+
+app.get('/api/food-library/progress', auth, (_req, res) => {
+  res.json({ ok: true, ...chatGptImageStore.status() });
+});
+
+app.get('/api/food-library', auth, (req, res) => {
+  const query = String(req.query.q || '').trim().toLowerCase();
+  const category = String(req.query.category || '').trim();
+  const page = Math.max(1, Number(req.query.page || 1));
+  const limit = Math.max(1, Math.min(100, Number(req.query.limit || 24)));
+  const stored = new Map(chatGptImageStore.list().map(row => [row.food_id, row]));
+  let rows = buildFoodLibrary().map(item => {
+    const image = stored.get(item.id);
+    return {
+      ...item,
+      image_url: image ? image.image_url : null,
+      image_status: image ? 'READY' : 'NEEDS_IMAGE'
+    };
+  });
+  if (category) rows = rows.filter(x => x.category === category);
+  if (query) rows = rows.filter(x => [x.id, x.title, x.category, x.main, x.style].some(v => String(v || '').toLowerCase().includes(query)));
+  const total = rows.length;
+  const start = (page - 1) * limit;
+  res.json({
+    ok: true,
+    total,
+    page,
+    limit,
+    categories: foodCategories(),
+    rows: rows.slice(start, start + limit)
+  });
+});
+
+app.post('/api/food-library/ingest-session', auth, foodImageRaw, async (req, res) => {
+  try {
+    const contentType = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+    const foodId = String(req.headers['x-sm-food-id'] || '').trim() || null;
+    const sourceUrl = String(req.headers['x-sm-source-url'] || '').trim() || null;
+    const result = await chatGptImageStore.importImage({
+      buffer: Buffer.from(req.body || []),
+      contentType,
+      foodId,
+      sourceUrl,
+      remoteReady: true
+    });
+    res.status(201).json({ ...result, public_image_url: `${publicBase(req)}${result.image_url}` });
+  } catch (error) {
+    res.status(Number(error?.statusCode || 500)).json({ ok: false, error: String(error?.message || error) });
+  }
+});
 
 function publicBase(req) {
   return (process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
