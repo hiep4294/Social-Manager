@@ -10,6 +10,7 @@ import {
   CHROME_EXTENSION_ACTIONS,
   extensionStatusIsHealthy
 } from './chrome-extension-bridge-core.js';
+import { createChatGptImageStore } from './chatgpt-image-store.js';
 
 const enabled = String(process.env.CHROME_EXTENSION_BRIDGE_ENABLED ?? 'true').toLowerCase() !== 'false';
 
@@ -20,6 +21,24 @@ function safeEqual(a, b) {
   const aa = Buffer.from(String(a || ''));
   const bb = Buffer.from(String(b || ''));
   return aa.length === bb.length && crypto.timingSafeEqual(aa, bb);
+}
+
+function readBinaryBody(req, maxBytes = 25 * 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on('data', chunk => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        reject(Object.assign(new Error('Payload ảnh quá lớn'), { statusCode: 413 }));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
 }
 
 function readJsonBody(req, maxBytes = 128 * 1024) {
@@ -89,6 +108,7 @@ if (!enabled) {
   const db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
   ensureBridgeSchema(db);
+  const chatGptImageStore = createChatGptImageStore({ db, root });
 
   const host = String(process.env.CHROME_EXTENSION_BRIDGE_HOST || '127.0.0.1');
   const port = Math.max(1024, Math.min(65535, Number(process.env.CHROME_EXTENSION_BRIDGE_PORT || 3210)));
@@ -96,7 +116,7 @@ if (!enabled) {
   const reservationTtlMs = Math.max(heartbeatTtlMs, Number(process.env.CHROME_EXTENSION_RESERVATION_TTL_MS || 60_000));
   const statusPath = path.join(publicDir, 'chrome-extension-status.json');
   const statePath = path.join(dataDir, 'chrome-extension-bridge.json');
-  const expectedVersion = '2.0.0';
+  const expectedVersion = '2.1.0';
 
   function newState() {
     return {
@@ -313,6 +333,32 @@ if (!enabled) {
       }
 
       if (!authenticate(req)) return sendJson(res, 401, { ok: false, error: 'Extension chưa xác thực' });
+
+      if (req.method === 'GET' && url.pathname === '/v1/chatgpt-image/next') {
+        return sendJson(res, 200, { ok: true, ...chatGptImageStore.status() });
+      }
+
+      if (req.method === 'GET' && url.pathname === '/v1/chatgpt-image/list') {
+        return sendJson(res, 200, { ok: true, rows: chatGptImageStore.list(), ...chatGptImageStore.status() });
+      }
+
+      if (req.method === 'POST' && url.pathname === '/v1/chatgpt-image/import') {
+        const contentType = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+        if (!['image/png', 'image/jpeg', 'image/webp', 'image/avif'].includes(contentType)) {
+          return sendJson(res, 415, { ok: false, error: `Định dạng ảnh không hỗ trợ: ${contentType || 'unknown'}` });
+        }
+        const buffer = await readBinaryBody(req);
+        const foodId = String(req.headers['x-sm-food-id'] || '').trim() || null;
+        const sourceUrl = String(req.headers['x-sm-source-url'] || '').trim() || null;
+        const result = await chatGptImageStore.importImage({ buffer, contentType, foodId, sourceUrl });
+        logEvent({
+          eventType: 'CHATGPT_IMAGE_IMPORTED',
+          status: 'DONE',
+          detail: { food_id: result.food_id, title: result.title, sha256: result.sha256 }
+        });
+        writeStatus({ chatgpt_image_store: chatGptImageStore.status() });
+        return sendJson(res, 201, result);
+      }
 
       if (req.method === 'POST' && url.pathname === '/v1/heartbeat') {
         const body = await readJsonBody(req);
