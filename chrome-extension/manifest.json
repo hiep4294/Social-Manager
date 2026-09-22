@@ -17,7 +17,11 @@
     "https://commons.wikimedia.org/*",
     "https://chatgpt.com/*",
     "https://chat.openai.com/*",
-    "https://*.oaiusercontent.com/*"
+    "https://*.oaiusercontent.com/*",
+    "https://*.app.github.dev/*",
+    "https://*.io.vn/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -42,6 +46,18 @@
       ],
       "js": [
         "content-chatgpt.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.app.github.dev/*",
+        "https://*.io.vn/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": [
+        "content-social-manager.js"
       ],
       "run_at": "document_idle"
     }
