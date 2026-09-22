@@ -1,16 +1,23 @@
 {
   "manifest_version": 3,
-  "name": "Social Manager Facebook Operator",
-  "version": "2.0.0",
-  "description": "Chrome operator for Social Manager. Uses the existing logged-in Facebook session and a localhost bridge.",
-  "permissions": ["storage", "tabs", "alarms"],
+  "name": "Social Manager Operator",
+  "version": "2.1.0",
+  "description": "Social Manager browser operator: Facebook automation and ChatGPT generated-image capture to the food library.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "alarms"
+  ],
   "host_permissions": [
     "http://127.0.0.1:3210/*",
     "https://www.facebook.com/*",
     "https://facebook.com/*",
     "https://web.facebook.com/*",
     "https://upload.wikimedia.org/*",
-    "https://commons.wikimedia.org/*"
+    "https://commons.wikimedia.org/*",
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://*.oaiusercontent.com/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -23,7 +30,19 @@
         "https://facebook.com/*",
         "https://web.facebook.com/*"
       ],
-      "js": ["content-facebook.js"],
+      "js": [
+        "content-facebook.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "content-chatgpt.js"
+      ],
       "run_at": "document_idle"
     }
   ],
