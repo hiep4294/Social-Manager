@@ -1,0 +1,99 @@
+name: Inspect New Facebook Page
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-new-facebook-page.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TARGET_PAGE_ID: '61594802124268'
+      META_SOURCE_ACCESS_TOKEN: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+      META_GRAPH_VERSION: ${{ vars.META_GRAPH_VERSION || 'v26.0' }}
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Inspect target Page
+        shell: bash
+        run: |
+          node - <<'NODE'
+          (async () => {
+            const targetId = process.env.TARGET_PAGE_ID;
+            const sourceToken = process.env.META_SOURCE_ACCESS_TOKEN;
+            const version = process.env.META_GRAPH_VERSION || 'v26.0';
+            if (!sourceToken) {
+              console.log('SECRET_PRESENT=NO');
+              process.exit(1);
+            }
+            console.log('SECRET_PRESENT=YES');
+
+            async function graph(path, token) {
+              const res = await fetch(`https://graph.facebook.com/${version}/${path}`, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              const body = await res.json();
+              if (!res.ok) {
+                console.log('GRAPH_ERROR_CODE=' + (body?.error?.code ?? 'unknown'));
+                console.log('GRAPH_ERROR_TYPE=' + (body?.error?.type ?? 'unknown'));
+                console.log('GRAPH_ERROR_MESSAGE=' + String(body?.error?.message || '').replace(/[A-Za-z0-9_-]{50,}/g,'[REDACTED]'));
+                process.exit(1);
+              }
+              return body;
+            }
+
+            const accounts = await graph('me/accounts?fields=id,name,category,access_token&limit=100', sourceToken);
+            const page = (accounts.data || []).find(p => String(p.id) === String(targetId));
+            if (!page) {
+              console.log('TARGET_PAGE_FOUND=NO');
+              console.log('VISIBLE_PAGE_IDS=' + (accounts.data || []).map(p => p.id).join(','));
+              process.exit(1);
+            }
+
+            console.log('TARGET_PAGE_FOUND=YES');
+            console.log('PAGE_ID=' + page.id);
+            console.log('PAGE_NAME=' + page.name);
+            console.log('PAGE_CATEGORY=' + (page.category || ''));
+
+            const pageToken = page.access_token;
+            console.log('::add-mask::' + pageToken);
+
+            const fields = [
+              'id','name','category','about','description','username',
+              'website','phone','emails','location','link',
+              'fan_count','followers_count','picture.type(large)'
+            ].join(',');
+
+            const info = await graph(`${targetId}?fields=${encodeURIComponent(fields)}`, pageToken);
+
+            const safe = {
+              id: info.id || null,
+              name: info.name || null,
+              category: info.category || null,
+              about: info.about || null,
+              description: info.description || null,
+              username: info.username || null,
+              website: info.website || null,
+              phone: info.phone || null,
+              emails: info.emails || null,
+              location: info.location || null,
+              link: info.link || null,
+              fan_count: info.fan_count ?? null,
+              followers_count: info.followers_count ?? null,
+              picture_url: info.picture?.data?.url || null
+            };
+
+            console.log('PAGE_INFO=' + JSON.stringify(safe));
+            console.log('RESULT=INSPECTION_COMPLETE');
+          })().catch(err => {
+            console.log('INSPECTION_FAILED=' + (err?.name || 'Error'));
+            process.exit(1);
+          });
+          NODE
