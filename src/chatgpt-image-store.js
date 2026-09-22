@@ -23,12 +23,19 @@ export function ensureChatGptImageSchema(db) {
       width INTEGER,
       height INTEGER,
       source_url TEXT,
+      remote_status TEXT NOT NULL DEFAULT 'PENDING',
+      remote_error TEXT,
+      remote_synced_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_chatgpt_food_images_updated
       ON chatgpt_food_images(updated_at);
   `);
+  const columns = new Set(db.prepare('PRAGMA table_info(chatgpt_food_images)').all().map(row => row.name));
+  if (!columns.has('remote_status')) db.exec("ALTER TABLE chatgpt_food_images ADD COLUMN remote_status TEXT NOT NULL DEFAULT 'PENDING'");
+  if (!columns.has('remote_error')) db.exec('ALTER TABLE chatgpt_food_images ADD COLUMN remote_error TEXT');
+  if (!columns.has('remote_synced_at')) db.exec('ALTER TABLE chatgpt_food_images ADD COLUMN remote_synced_at TEXT');
 }
 
 export function createChatGptImageStore({ db, root }) {
@@ -72,7 +79,7 @@ export function createChatGptImageStore({ db, root }) {
     };
   }
 
-  async function importImage({ buffer, contentType, foodId, sourceUrl }) {
+  async function importImage({ buffer, contentType, foodId, sourceUrl, remoteReady = false }) {
     if (!Buffer.isBuffer(buffer) || !buffer.length) throw httpError('Ảnh rỗng', 400);
     if (buffer.length > 25 * 1024 * 1024) throw httpError('Ảnh vượt quá 25 MB', 413);
 
@@ -116,9 +123,14 @@ export function createChatGptImageStore({ db, root }) {
     const imageUrl = `/uploads/food-library/${encodeURIComponent(fileName)}`;
     const now = nowIso();
     const existing = db.prepare('SELECT food_id,created_at FROM chatgpt_food_images WHERE food_id=?').get(target.id);
+    const remoteStatus = remoteReady ? 'READY' : 'PENDING';
+    const remoteSyncedAt = remoteReady ? now : null;
     db.prepare(`
-      INSERT INTO chatgpt_food_images(food_id,title,image_path,image_url,sha256,width,height,source_url,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO chatgpt_food_images(
+        food_id,title,image_path,image_url,sha256,width,height,source_url,
+        remote_status,remote_error,remote_synced_at,created_at,updated_at
+      )
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(food_id) DO UPDATE SET
         title=excluded.title,
         image_path=excluded.image_path,
@@ -127,6 +139,9 @@ export function createChatGptImageStore({ db, root }) {
         width=excluded.width,
         height=excluded.height,
         source_url=excluded.source_url,
+        remote_status=excluded.remote_status,
+        remote_error=NULL,
+        remote_synced_at=excluded.remote_synced_at,
         updated_at=excluded.updated_at
     `).run(
       target.id,
@@ -137,6 +152,9 @@ export function createChatGptImageStore({ db, root }) {
       1080,
       1080,
       String(sourceUrl || '').slice(0, 1800) || null,
+      remoteStatus,
+      null,
+      remoteSyncedAt,
       existing?.created_at || now,
       now
     );
@@ -156,10 +174,36 @@ export function createChatGptImageStore({ db, root }) {
     };
   }
 
+  function markRemoteSync(foodId, { ok, error = null } = {}) {
+    const now = nowIso();
+    db.prepare(`
+      UPDATE chatgpt_food_images
+      SET remote_status=?, remote_error=?, remote_synced_at=?, updated_at=?
+      WHERE food_id=?
+    `).run(ok ? 'READY' : 'FAILED', ok ? null : String(error || 'REMOTE_SYNC_FAILED').slice(0, 1800), ok ? now : null, now, foodId);
+    return db.prepare('SELECT * FROM chatgpt_food_images WHERE food_id=?').get(foodId) || null;
+  }
+
+  function pendingRemote(limit = 20) {
+    return db.prepare(`
+      SELECT * FROM chatgpt_food_images
+      WHERE remote_status IN ('PENDING','FAILED')
+      ORDER BY updated_at ASC
+      LIMIT ?
+    `).all(Math.max(1, Math.min(100, Number(limit) || 20)));
+  }
+
+  function get(foodId) {
+    return db.prepare('SELECT * FROM chatgpt_food_images WHERE food_id=?').get(String(foodId || '')) || null;
+  }
+
   return {
     nextMissing,
     status,
     importImage,
+    markRemoteSync,
+    pendingRemote,
+    get,
     list: () => storedRows()
   };
 }
