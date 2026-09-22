@@ -7,12 +7,15 @@ import {
   pairBridge,
   reportBridgeJob,
   getChatGptImageProgress,
-  importChatGptImage
+  importChatGptImage,
+  getPendingChatGptImage,
+  markChatGptImageSynced
 } from './bridge-client.js';
 import { runFacebookJob } from './operator-runner.js';
 
 const POLL_ALARM = 'social-manager-poll';
 let busy = false;
+let imageSyncBusy = false;
 let lastResult = null;
 let lastImageImport = null;
 
@@ -51,6 +54,84 @@ async function fetchImageBytes(sourceUrl) {
   return { bytes: new Uint8Array(buffer), mime: guessImageContentType(new Uint8Array(buffer), headerType) };
 }
 
+function sendTabMessage(tabId, message) {
+  return new Promise(resolve => {
+    chrome.tabs.sendMessage(tabId, message, response => {
+      if (chrome.runtime.lastError) return resolve(null);
+      resolve(response || null);
+    });
+  });
+}
+
+function looksLikeSocialManagerUrl(url) {
+  try {
+    const u = new URL(String(url || ''));
+    if (!['http:', 'https:'].includes(u.protocol)) return false;
+    return u.hostname === 'localhost'
+      || u.hostname === '127.0.0.1'
+      || u.hostname.endsWith('.app.github.dev')
+      || u.hostname.endsWith('.io.vn');
+  } catch {
+    return false;
+  }
+}
+
+async function findSocialManagerTab() {
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    if (!tab.id || !looksLikeSocialManagerUrl(tab.url)) continue;
+    const ping = await sendTabMessage(tab.id, { type: 'SM_PING' });
+    if (ping?.ok) return tab;
+  }
+  return null;
+}
+
+async function syncPendingFoodImages(maxItems = 2) {
+  if (imageSyncBusy) return { ok: false, skipped: 'BUSY' };
+  imageSyncBusy = true;
+  try {
+    const tab = await findSocialManagerTab();
+    if (!tab?.id) return { ok: false, pending: true, reason: 'NO_AUTHENTICATED_SOCIAL_MANAGER_TAB' };
+
+    let synced = 0;
+    let last = null;
+    for (let i = 0; i < Math.max(1, Math.min(5, Number(maxItems) || 2)); i += 1) {
+      const pending = await getPendingChatGptImage();
+      if (!pending?.item) break;
+
+      const item = pending.item;
+      const dataUrl = `data:${item.content_type || 'image/webp'};base64,${item.data_base64}`;
+      const remote = await sendTabMessage(tab.id, {
+        type: 'SM_IMPORT_FOOD_IMAGE',
+        foodId: item.food_id,
+        sourceUrl: item.source_url || '',
+        dataUrl
+      });
+
+      if (!remote?.ok) {
+        const error = remote?.error || 'Không đồng bộ được ảnh lên Social Manager';
+        await markChatGptImageSynced(item.food_id, false, error).catch(() => {});
+        return { ok: false, pending: true, reason: error, synced };
+      }
+
+      await markChatGptImageSynced(item.food_id, true, null);
+      synced += 1;
+      last = remote;
+      lastImageImport = {
+        ...(lastImageImport || {}),
+        remote_sync: 'READY',
+        remote_food_id: item.food_id,
+        remote_image_url: remote.public_image_url || remote.image_url || null,
+        at: new Date().toISOString()
+      };
+    }
+
+    return { ok: true, synced, last };
+  } finally {
+    imageSyncBusy = false;
+  }
+}
+
 async function saveChatGptImage({ sourceUrl, foodId, dataUrl }) {
   let loaded;
   try {
@@ -65,8 +146,21 @@ async function saveChatGptImage({ sourceUrl, foodId, dataUrl }) {
     foodId,
     sourceUrl
   });
-  lastImageImport = { ...result, at: new Date().toISOString() };
-  return { ok: true, ...result };
+  lastImageImport = { ...result, remote_sync: 'PENDING', at: new Date().toISOString() };
+  const sync = await syncPendingFoodImages(1).catch(error => ({
+    ok: false,
+    pending: true,
+    reason: String(error?.message || error)
+  }));
+  if (sync?.ok && sync.synced > 0) {
+    lastImageImport = { ...lastImageImport, remote_sync: 'READY', at: new Date().toISOString() };
+  }
+  return {
+    ok: true,
+    ...result,
+    remote_sync: sync?.ok && sync.synced > 0 ? 'READY' : 'PENDING',
+    remote_sync_reason: sync?.ok ? null : (sync?.reason || null)
+  };
 }
 
 async function setBadge(text) {
@@ -172,4 +266,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 chrome.alarms.create(POLL_ALARM, { periodInMinutes: 0.5 });
 setInterval(() => poll().catch(() => {}), 5000);
+setInterval(() => syncPendingFoodImages(2).catch(() => {}), 8000);
 poll().catch(() => {});
+syncPendingFoodImages(2).catch(() => {});
