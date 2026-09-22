@@ -82,6 +82,8 @@ jobs:
         run: npm run test:auto
       - name: Food Network planner test
         run: npm run test:food
+      - name: Require food photo before cloud publishing
+        run: node tests/cloud-food-image.test.mjs
       - name: Food Network planning smoke test
         run: FOOD_NETWORK_PLAN_DAYS=30 npm run food:plan
       - name: End-to-end smoke test

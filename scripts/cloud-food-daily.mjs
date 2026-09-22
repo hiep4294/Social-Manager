@@ -356,14 +356,7 @@ async function buildImage(recipe) {
     return { path:out, background };
   }
 
-  const blank = {
-    create: { width:1080, height:1080, channels:3, background:'#fff8eb' }
-  };
-  await sharp(blank)
-    .composite([{ input: brandOverlay({ title:recipe.title, hasPhoto:false, ingredients:recipe.ingredients }) }])
-    .jpeg({quality:92})
-    .toFile(out);
-  return { path:out, background:null };
+  throw new Error('Không tìm được ảnh món ăn phù hợp; dừng đăng, không dùng ảnh nền chữ thay thế');
 }
 
 async function publishPhoto(file, caption) {
@@ -465,7 +458,23 @@ if (!recipe || usedSet.has(Number(recipe.id))) {
 }
 
 const rendered = buildRecipePost({ page:{...page,name:PAGE_NAME}, recipe });
-const image = await buildImage(recipe);
+let image;
+try {
+  image = await buildImage(recipe);
+} catch {
+  const result = {
+    status:'WAITING_IMAGE',
+    reason:'Không tìm được hoặc không xử lý được ảnh món ăn; chưa đăng bài và chưa đánh dấu món đã dùng.',
+    publish_requested:PUBLISH,
+    date:DATE,
+    page:{ id:PAGE_ID, name:PAGE_NAME },
+    recipe:{ id:recipe.id, title:recipe.title },
+    published:null
+  };
+  fs.writeFileSync(path.join(outDir, `${DATE}-result.json`), JSON.stringify(result,null,2),'utf8');
+  console.error('CLOUD_FOOD_RESULT='+JSON.stringify(result));
+  process.exit(1);
+}
 let caption = `${rendered.content}\n\n#HomNayAnGi ${recipeMarker(recipe.id)}`;
 if (image.background) {
   caption += `\n\nẢnh nền: Wikimedia Commons (${image.background.license}).`;
