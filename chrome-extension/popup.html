@@ -11,6 +11,13 @@ body{font:14px Arial,sans-serif;margin:0;width:340px;background:#f6f7f9;color:#2
 <div class="card"><div class="label">Trạng thái</div><div id="status" class="value">Đang kiểm tra...</div><div id="detail" class="label"></div></div>
 <div class="card" id="pairCard"><div class="label">Mã ghép đôi từ log Agent</div><div class="row" style="margin-top:7px"><input id="code" class="grow" placeholder="6 chữ số"><button id="pair">Ghép</button></div></div>
 <div class="card"><div class="row"><button id="refresh" class="secondary">Kiểm tra</button><button id="poll">Nhận lệnh ngay</button></div></div>
+<div class="card">
+  <div class="label">Kho ảnh món ăn từ ChatGPT</div>
+  <div id="imageProgress" class="value">Đang kiểm tra...</div>
+  <div id="imageNext" class="label"></div>
+  <div class="row" style="margin-top:8px"><button id="openChatgpt">Mở ChatGPT</button></div>
+</div>
+<div class="card"><div class="label">Ảnh vừa lưu</div><pre id="lastImage">Chưa có</pre></div>
 <div class="card"><div class="label">Lệnh gần nhất</div><pre id="last">Chưa có</pre></div>
 <script src="popup.js"></script>
 </main></body>
