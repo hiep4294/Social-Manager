@@ -168,34 +168,75 @@ async function resolvePageAccessToken(sourceToken) {
   const token = String(sourceToken || '').trim();
   if (!token) return '';
 
-  async function graph(pathname) {
+  async function graph(pathname, candidateToken = token) {
     const r = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${pathname}`, {
-      headers:{ Authorization:`Bearer ${token}` }
+      headers:{ Authorization:`Bearer ${candidateToken}` }
     });
     const body = await r.json().catch(() => ({}));
     if (!r.ok || body?.error) {
-      const code = body?.error?.code ?? 'unknown';
-      throw new Error(`Không xác minh được Meta token, code=${code}`);
+      const error = new Error(body?.error?.message || `Meta Graph HTTP ${r.status}`);
+      error.metaCode = body?.error?.code ?? 'unknown';
+      throw error;
     }
     return body;
   }
 
-  const me = await graph('me?fields=id,name');
-  if (String(me.id) === PAGE_ID) {
-    console.log('META_TOKEN_TYPE=PAGE');
+  let me = null;
+  try {
+    me = await graph('me?fields=id,name');
+  } catch (error) {
+    throw new Error(`Không xác minh được Meta token, code=${error.metaCode ?? 'unknown'}`);
+  }
+
+  if (String(me?.id || '') === PAGE_ID) {
+    console.log('META_TOKEN_MODE=PAGE');
     return token;
   }
 
-  console.log('META_TOKEN_TYPE=USER_OR_SYSTEM_USER');
-  const accounts = await graph('me/accounts?fields=id,name,access_token&limit=100');
-  const target = (accounts.data || []).find(x => String(x?.id || '') === PAGE_ID);
-
-  if (!target?.access_token) {
-    throw new Error(`Token nguồn không cấp được Page token cho PAGE_ID=${PAGE_ID}; kiểm tra System User/User đã được gán Page và quyền Pages`);
+  // Preferred path for User tokens: ask the target Page directly for its
+  // Page Access Token. This avoids scanning every managed Page.
+  try {
+    const target = await graph(`${PAGE_ID}?fields=id,name,access_token`);
+    if (target?.access_token) {
+      console.log('META_TOKEN_MODE=USER_TO_PAGE');
+      console.log(`META_TARGET_PAGE_RESOLVED=${target.id} ${target.name || ''}`);
+      return String(target.access_token).trim();
+    }
+  } catch {
+    // Continue to compatibility fallbacks below.
   }
 
-  console.log(`META_TARGET_PAGE_RESOLVED=${target.id} ${target.name || ''}`);
-  return String(target.access_token).trim();
+  // Compatibility path for normal User tokens.
+  try {
+    const accounts = await graph('me/accounts?fields=id,name,access_token&limit=100');
+    const target = (accounts.data || []).find(x => String(x?.id || '') === PAGE_ID);
+    if (target?.access_token) {
+      console.log('META_TOKEN_MODE=USER_TO_PAGE_LIST');
+      console.log(`META_TARGET_PAGE_RESOLVED=${target.id} ${target.name || ''}`);
+      return String(target.access_token).trim();
+    }
+  } catch {
+    // System User tokens do not always behave like normal Facebook User
+    // tokens on /me/accounts. Test direct asset access instead.
+  }
+
+  // System User mode: the Business System User must have this Page assigned
+  // and the token must carry the required Pages permissions. In that setup,
+  // the source token can act on the assigned Page directly.
+  try {
+    const target = await graph(`${PAGE_ID}?fields=id,name`);
+    if (String(target?.id || '') === PAGE_ID) {
+      console.log('META_TOKEN_MODE=SYSTEM_USER_DIRECT');
+      console.log(`META_TARGET_PAGE_RESOLVED=${target.id} ${target.name || ''}`);
+      return token;
+    }
+  } catch {
+    // Fall through to the explicit error below.
+  }
+
+  throw new Error(
+    `Token không truy cập được PAGE_ID=${PAGE_ID}; kiểm tra System User/User đã được gán Page và quyền Pages`
+  );
 }
 
 async function checkTodayRecentPosts() {
