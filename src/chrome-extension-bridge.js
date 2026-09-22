@@ -342,6 +342,38 @@ if (!enabled) {
         return sendJson(res, 200, { ok: true, rows: chatGptImageStore.list(), ...chatGptImageStore.status() });
       }
 
+      if (req.method === 'GET' && url.pathname === '/v1/chatgpt-image/pending') {
+        const row = chatGptImageStore.pendingRemote(1)[0] || null;
+        if (!row) return sendJson(res, 200, { ok: true, item: null });
+        const absolutePath = path.isAbsolute(row.image_path) ? row.image_path : path.join(root, row.image_path);
+        if (!fs.existsSync(absolutePath)) {
+          chatGptImageStore.markRemoteSync(row.food_id, { ok: false, error: 'LOCAL_IMAGE_FILE_MISSING' });
+          return sendJson(res, 409, { ok: false, error: `Thiếu file local cho ${row.food_id}` });
+        }
+        return sendJson(res, 200, {
+          ok: true,
+          item: {
+            food_id: row.food_id,
+            title: row.title,
+            source_url: row.source_url || '',
+            content_type: 'image/webp',
+            data_base64: fs.readFileSync(absolutePath).toString('base64')
+          }
+        });
+      }
+
+      if (req.method === 'POST' && url.pathname === '/v1/chatgpt-image/mark-synced') {
+        const body = await readJsonBody(req);
+        const foodId = String(body.food_id || '').trim();
+        if (!foodId) return sendJson(res, 400, { ok: false, error: 'Thiếu food_id' });
+        const row = chatGptImageStore.markRemoteSync(foodId, {
+          ok: body.ok === true,
+          error: body.error || null
+        });
+        if (!row) return sendJson(res, 404, { ok: false, error: 'Không tìm thấy ảnh local' });
+        return sendJson(res, 200, { ok: true, row });
+      }
+
       if (req.method === 'POST' && url.pathname === '/v1/chatgpt-image/import') {
         const contentType = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
         if (!['image/png', 'image/jpeg', 'image/webp', 'image/avif'].includes(contentType)) {
