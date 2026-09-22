@@ -101,3 +101,15 @@ export async function importChatGptImage({ buffer, contentType, foodId = '', sou
   }
   return payload;
 }
+
+
+export async function getPendingChatGptImage() {
+  return bridgeRequest('/v1/chatgpt-image/pending');
+}
+
+export async function markChatGptImageSynced(foodId, ok, error = null) {
+  return bridgeRequest('/v1/chatgpt-image/mark-synced', {
+    method: 'POST',
+    body: { food_id: foodId, ok: ok === true, error }
+  });
+}
