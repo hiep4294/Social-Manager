@@ -1,0 +1,94 @@
+name: Meta System User Health
+
+on:
+  workflow_dispatch:
+    inputs:
+      page_id:
+        description: 'Facebook Page ID to verify'
+        required: true
+        type: string
+        default: '61594802124268'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-meta-system-user:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      META_ACCESS_TOKEN: ${{ secrets.FACEBOOK_SYSTEM_USER_ACCESS_TOKEN }}
+      META_GRAPH_VERSION: ${{ vars.META_GRAPH_VERSION || 'v26.0' }}
+      TARGET_PAGE_ID: ${{ inputs.page_id }}
+
+    steps:
+      - name: Verify token and Page access without publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const token = String(process.env.META_ACCESS_TOKEN || '').trim();
+          const version = String(process.env.META_GRAPH_VERSION || 'v26.0').trim();
+          const pageId = String(process.env.TARGET_PAGE_ID || '').trim();
+
+          if (!token) {
+            console.error('SYSTEM_USER_SECRET_PRESENT=NO');
+            process.exit(2);
+          }
+          if (!/^\d+$/.test(pageId)) {
+            console.error('TARGET_PAGE_ID_VALID=NO');
+            process.exit(2);
+          }
+
+          console.log('SYSTEM_USER_SECRET_PRESENT=YES');
+          console.log('TOKEN_VALUE_PRINTED=NO');
+          console.log(`TARGET_PAGE_ID=${pageId}`);
+
+          async function graph(pathname) {
+            const res = await fetch(`https://graph.facebook.com/${version}/${pathname}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok || body?.error) {
+              const e = new Error(body?.error?.message || `HTTP ${res.status}`);
+              e.code = body?.error?.code ?? 'unknown';
+              e.type = body?.error?.type ?? 'unknown';
+              throw e;
+            }
+            return body;
+          }
+
+          try {
+            const me = await graph('me?fields=id,name');
+            console.log('TOKEN_VALID=YES');
+            console.log(`TOKEN_ACTOR_ID=${me.id || ''}`);
+            console.log(`TOKEN_ACTOR_NAME=${me.name || ''}`);
+          } catch (e) {
+            console.error('TOKEN_VALID=NO');
+            console.error(`GRAPH_ERROR_CODE=${e.code}`);
+            console.error(`GRAPH_ERROR_TYPE=${e.type}`);
+            process.exit(3);
+          }
+
+          try {
+            const page = await graph(`${pageId}?fields=id,name`);
+            console.log('TARGET_PAGE_ACCESS=YES');
+            console.log(`PAGE_ID=${page.id || ''}`);
+            console.log(`PAGE_NAME=${page.name || ''}`);
+          } catch (e) {
+            console.error('TARGET_PAGE_ACCESS=NO');
+            console.error(`GRAPH_ERROR_CODE=${e.code}`);
+            console.error(`GRAPH_ERROR_TYPE=${e.type}`);
+            process.exit(4);
+          }
+
+          try {
+            await graph(`${pageId}/posts?fields=id&limit=1`);
+            console.log('TARGET_PAGE_READ_POSTS=YES');
+          } catch (e) {
+            console.log('TARGET_PAGE_READ_POSTS=NO');
+            console.log(`READ_POSTS_ERROR_CODE=${e.code}`);
+          }
+
+          console.log('RESULT=SYSTEM_USER_PAGE_ACCESS_READY');
+          NODE
