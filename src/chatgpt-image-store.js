@@ -69,12 +69,17 @@ export function createChatGptImageStore({ db, root }) {
   }
 
   function status() {
+    const rows = storedRows();
     const stored = validStoredIds();
     const next = library.find(item => !stored.has(item.id)) || null;
+    const remoteReady = rows.filter(row => stored.has(row.food_id) && row.remote_status === 'READY').length;
+    const remotePending = rows.filter(row => stored.has(row.food_id) && row.remote_status !== 'READY').length;
     return {
       total: library.length,
       ready: stored.size,
       missing: Math.max(0, library.length - stored.size),
+      remote_ready: remoteReady,
+      remote_pending: remotePending,
       next: next ? { id: next.id, title: next.title, category: next.category, image_prompt: next.image_prompt } : null
     };
   }
