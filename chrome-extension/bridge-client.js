@@ -1,5 +1,5 @@
 export const BRIDGE_URL = 'http://127.0.0.1:3210';
-export const EXTENSION_VERSION = '2.0.0';
+export const EXTENSION_VERSION = '2.1.0';
 
 export async function getBridgeToken() {
   const value = await chrome.storage.local.get('bridgeToken');
@@ -68,4 +68,36 @@ export async function reportBridgeJob(job, execution) {
 export async function bridgeHealth() {
   try { return await bridgeRequest('/v1/health', { auth: false }); }
   catch (error) { return { ok: false, error: String(error?.message || error) }; }
+}
+
+
+export async function getChatGptImageProgress() {
+  return bridgeRequest('/v1/chatgpt-image/next');
+}
+
+export async function importChatGptImage({ buffer, contentType, foodId = '', sourceUrl = '' }) {
+  const token = await getBridgeToken();
+  if (!token) throw new Error('Extension chưa ghép đôi với Social Manager Agent');
+  const headers = {
+    'content-type': String(contentType || 'image/png'),
+    'x-sm-extension-id': chrome.runtime.id
+  };
+  if (foodId) headers['x-sm-food-id'] = String(foodId);
+  if (sourceUrl) headers['x-sm-source-url'] = String(sourceUrl).slice(0, 1800);
+  headers.authorization = `Bearer ${token}`;
+
+  const response = await fetch(`${BRIDGE_URL}/v1/chatgpt-image/import`, {
+    method: 'POST',
+    headers,
+    body: buffer,
+    cache: 'no-store'
+  });
+  let payload = {};
+  try { payload = await response.json(); } catch {}
+  if (!response.ok) {
+    const error = new Error(payload.error || `Bridge HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+  return payload;
 }
