@@ -18,6 +18,7 @@ const PUBLISH = String(process.env.CLOUD_FOOD_PUBLISH || 'false').toLowerCase() 
 const DATE = String(process.env.FOOD_DATE || localDateInVietnam()).trim();
 const outDir = path.resolve(process.cwd(), 'artifacts', 'cloud-food', STATE_KEY);
 const TRIGGER_CRON = String(process.env.CLOUD_TRIGGER_CRON || '').trim();
+const SCHEDULE_ENABLED = String(process.env.FOOD_SCHEDULE_ENABLED || 'true').toLowerCase() === 'true';
 
 if (!Number.isInteger(PAGE_SLOT) || PAGE_SLOT < 1) throw new Error('FOOD_PAGE_SLOT không hợp lệ');
 if (!/^\d+$/.test(PAGE_ID)) throw new Error('FACEBOOK_PAGE_ID không hợp lệ');
@@ -43,6 +44,18 @@ const TRIGGER_HOUR_VN = triggerHourVN(TRIGGER_CRON);
 const SCHEDULE_EVENT = Boolean(TRIGGER_CRON);
 
 fs.mkdirSync(outDir, { recursive: true });
+
+if (SCHEDULE_EVENT && !SCHEDULE_ENABLED) {
+  const result = {
+    status:'SCHEDULE_DISABLED',
+    date:DATE,
+    page:{ id:PAGE_ID, name:PAGE_NAME },
+    publish_requested:PUBLISH
+  };
+  fs.writeFileSync(path.join(outDir, `${DATE}-schedule-disabled.json`), JSON.stringify(result,null,2), 'utf8');
+  console.log('CLOUD_FOOD_RESULT='+JSON.stringify(result));
+  process.exit(0);
+}
 
 if (SCHEDULE_EVENT && TRIGGER_HOUR_VN !== SELECTED_HOUR_VN) {
   const result = {
