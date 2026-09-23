@@ -54,7 +54,11 @@ export async function generateFoodPhotoWithOpenAI({
   size = '1024x1024',
   quality = 'high',
 }) {
-  const key = String(apiKey || '').trim();
+  const rawKey = String(apiKey || '').trim();
+  const key = rawKey
+    .replace(/^["'\u2018\u2019\u201C\u201D]+/, '')
+    .replace(/["'\u2018\u2019\u201C\u201D]+$/, '')
+    .trim();
 
   if (!key) {
     throw new Error('Thiếu OPENAI_API_KEY');
