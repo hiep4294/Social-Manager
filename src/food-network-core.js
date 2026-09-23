@@ -132,7 +132,7 @@ export function buildRecipePost({ page, recipe }) {
   const intro = introByVoice[page.voice] || `Món hôm nay: ${recipe.title}. Cùng làm từng bước để món ngon ổn định và dễ thành công.`;
   const ingredients = recipe.ingredients.map(x => `- ${x}`).join('\n');
   const steps = recipe.steps.map((x, i) => `${i + 1}. ${x}`).join('\n');
-  const hashtags = ['#MonNgonMoiNgay','#HuongDanNauAn','#BepNha','#CongThucNauAn'];
+  const hashtags = ['#HuongDanNauAn','#BepNha','#CongThucNauAn'];
   const content = `${intro}\n\nNGUYÊN LIỆU\n${ingredients}\n\nCÁCH LÀM\n${steps}\n\nMẸO NHỎ\n${recipe.tip}\n\n${hashtags.join(' ')}`;
   const imagePrompt = `Ảnh chụp món ăn ${recipe.title}, món ăn Việt Nam trình bày hấp dẫn trên bàn ăn gia đình, ánh sáng tự nhiên, food photography chân thực, góc chụp 45 độ, chi tiết món ăn rõ, không chữ, không logo, không người, khung vuông 1:1.`;
   return { content, imagePrompt };
