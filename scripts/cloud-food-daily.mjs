@@ -4,17 +4,27 @@ import path from 'node:path';
 import sharp from 'sharp';
 import { foodPageBlueprints, foodRecipes, pickRecipeForPage, buildRecipePost, localDateInVietnam } from '../src/food-network-core.js';
 
-const PAGE_SLOT = 5;
-const PAGE_NAME = 'Hôm Nay Ăn Gì?';
+const PAGE_SLOT = Number(process.env.FOOD_PAGE_SLOT || 5);
+const PAGE_NAME = String(process.env.FOOD_PAGE_NAME || 'Hôm Nay Ăn Gì?').trim();
 const PAGE_ID = String(process.env.FACEBOOK_PAGE_ID || '1358329424025816').trim();
+const STATE_KEY = String(process.env.FOOD_STATE_KEY || 'hom-nay-an-gi').trim().toLowerCase();
+const PAGE_HASHTAG = String(process.env.FOOD_PAGE_HASHTAG || '#HomNayAnGi').trim();
+const BRAND_LINE_1 = String(process.env.FOOD_BRAND_LINE_1 || 'HÔM NAY').trim();
+const BRAND_LINE_2 = String(process.env.FOOD_BRAND_LINE_2 || 'ĂN GÌ?').trim();
+const BRAND_SUBTITLE = String(process.env.FOOD_BRAND_SUBTITLE || 'MÓN NGON MỖI NGÀY').trim();
 let TOKEN = String(process.env.META_ACCESS_TOKEN || process.env.FACEBOOK_PAGE_ACCESS_TOKEN || '').trim();
 const GRAPH_VERSION = String(process.env.META_GRAPH_VERSION || 'v26.0').trim();
 const PUBLISH = String(process.env.CLOUD_FOOD_PUBLISH || 'false').toLowerCase() === 'true';
 const DATE = String(process.env.FOOD_DATE || localDateInVietnam()).trim();
-const outDir = path.resolve(process.cwd(), 'artifacts', 'cloud-food');
+const outDir = path.resolve(process.cwd(), 'artifacts', 'cloud-food', STATE_KEY);
 const TRIGGER_CRON = String(process.env.CLOUD_TRIGGER_CRON || '').trim();
-const STATE_JSON = path.resolve(process.cwd(), 'content', 'hom-nay-an-gi-recipe-state.json');
-const STATE_CSV = path.resolve(process.cwd(), 'content', 'hom-nay-an-gi-recipe-state.csv');
+
+if (!Number.isInteger(PAGE_SLOT) || PAGE_SLOT < 1) throw new Error('FOOD_PAGE_SLOT không hợp lệ');
+if (!/^\d+$/.test(PAGE_ID)) throw new Error('FACEBOOK_PAGE_ID không hợp lệ');
+if (!/^[a-z0-9-]+$/.test(STATE_KEY)) throw new Error('FOOD_STATE_KEY không hợp lệ');
+
+const STATE_JSON = path.resolve(process.cwd(), 'content', `${STATE_KEY}-recipe-state.json`);
+const STATE_CSV = path.resolve(process.cwd(), 'content', `${STATE_KEY}-recipe-state.csv`);
 
 function selectedPostingHourVN(date) {
   const digest = crypto.createHash('sha256')
@@ -271,7 +281,7 @@ async function checkTodayRecentPosts() {
       recipeId = hit?.id || null;
     }
 
-    if (/#HomNayAnGi\b/i.test(message) || rid || recipeId) {
+    if (message.toLowerCase().includes(PAGE_HASHTAG.toLowerCase()) || rid || recipeId) {
       return {
         found:true,
         checked:true,
@@ -370,9 +380,9 @@ function brandOverlay({ title, hasPhoto, ingredients }) {
 
     <g transform="translate(68,64)">
       <circle cx="112" cy="112" r="108" fill="#fffaf0" stroke="#6d3b18" stroke-width="10"/>
-      <text x="112" y="90" text-anchor="middle" font-size="38" font-weight="900" fill="#4b2712" font-family="Arial,Segoe UI,sans-serif">HÔM NAY</text>
-      <text x="112" y="140" text-anchor="middle" font-size="46" font-weight="900" fill="#4b2712" font-family="Arial,Segoe UI,sans-serif">ĂN GÌ?</text>
-      <text x="112" y="174" text-anchor="middle" font-size="17" font-weight="700" fill="#8c4f24" font-family="Arial,Segoe UI,sans-serif">MÓN NGON MỖI NGÀY</text>
+      <text x="112" y="90" text-anchor="middle" font-size="38" font-weight="900" fill="#4b2712" font-family="Arial,Segoe UI,sans-serif">${xml(BRAND_LINE_1)}</text>
+      <text x="112" y="140" text-anchor="middle" font-size="46" font-weight="900" fill="#4b2712" font-family="Arial,Segoe UI,sans-serif">${xml(BRAND_LINE_2)}</text>
+      <text x="112" y="174" text-anchor="middle" font-size="17" font-weight="700" fill="#8c4f24" font-family="Arial,Segoe UI,sans-serif">${xml(BRAND_SUBTITLE)}</text>
     </g>
 
     ${titleSvg}
@@ -423,8 +433,9 @@ async function publishPhoto(file, caption) {
   return body;
 }
 
-const page = foodPageBlueprints().find(x => x.slot === PAGE_SLOT);
-if (!page) throw new Error('Không tìm thấy blueprint Hôm Nay Ăn Gì?');
+const blueprint = foodPageBlueprints().find(x => x.slot === PAGE_SLOT);
+if (!blueprint) throw new Error(`Không tìm thấy blueprint slot=${PAGE_SLOT}`);
+const page = { ...blueprint, name:PAGE_NAME };
 
 const state = loadRecipeState();
 
@@ -507,7 +518,7 @@ if (!recipe || usedSet.has(Number(recipe.id))) {
 
 const rendered = buildRecipePost({ page:{...page,name:PAGE_NAME}, recipe });
 const image = await buildImage(recipe);
-let caption = `${rendered.content}\n\n#HomNayAnGi ${recipeMarker(recipe.id)}`;
+let caption = `${rendered.content}\n\n${PAGE_HASHTAG} ${recipeMarker(recipe.id)}`;
 if (image.background) {
   caption += `\n\nẢnh nền: Wikimedia Commons (${image.background.license}).`;
 }
