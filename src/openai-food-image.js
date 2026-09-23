@@ -64,6 +64,10 @@ export async function generateFoodPhotoWithOpenAI({
     throw new Error('Thiếu OPENAI_API_KEY');
   }
 
+  if (!key.startsWith('sk-') || !/^[\x21-\x7E]+$/.test(key)) {
+    throw new Error('OPENAI_API_KEY không đúng định dạng API key ASCII bắt đầu bằng sk-');
+  }
+
   if (!recipe?.title) {
     throw new Error('Recipe không hợp lệ');
   }
