@@ -50,7 +50,7 @@ export async function generateFoodPhotoWithOpenAI({
   date,
   stateKey,
   apiKey,
-  model = 'gpt-image-2.5-flare',
+  model = 'gpt-image-2',
   size = '1024x1024',
   quality = 'high',
 }) {
