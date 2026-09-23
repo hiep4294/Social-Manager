@@ -19,6 +19,15 @@ on:
         description: 'Ngày YYYY-MM-DD, để trống = hôm nay giờ Việt Nam'
         required: false
         type: string
+      target:
+        description: 'Page chạy thủ công'
+        required: true
+        type: choice
+        default: 'all'
+        options:
+          - all
+          - hom-nay-an-gi
+          - mon-ngon-moi-ngay
 
 permissions:
   contents: write
@@ -64,12 +73,8 @@ jobs:
       FOOD_BRAND_LINE_2: ${{ matrix.brand_line_2 }}
       FOOD_BRAND_SUBTITLE: ${{ matrix.brand_subtitle }}
       FOOD_SCHEDULE_ENABLED: ${{ matrix.schedule_enabled }}
-      FOOD_IMAGE_PROVIDER: 'openai'
-      FOOD_IMAGE_REQUIRED: 'true'
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      OPENAI_IMAGE_MODEL: 'gpt-image-2'
-      OPENAI_IMAGE_SIZE: '1024x1024'
-      OPENAI_IMAGE_QUALITY: 'high'
+      FOOD_MANUAL_TARGET: ${{ inputs.target }}
+      FOOD_IMAGE_PROVIDER: 'library'
       META_ACCESS_TOKEN: ${{ secrets.FACEBOOK_SYSTEM_USER_ACCESS_TOKEN || secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
       META_GRAPH_VERSION: ${{ vars.META_GRAPH_VERSION || 'v26.0' }}
       FOOD_DATE: ${{ inputs.date }}
@@ -90,7 +95,7 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Generate branded image and publish
+      - name: Prepare branded library image and publish
         run: node scripts/cloud-food-daily.mjs
 
       - name: Persist recipe usage state
