@@ -3,7 +3,6 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import sharp from 'sharp';
 import { foodPageBlueprints, foodRecipes, pickRecipeForPage, buildRecipePost, localDateInVietnam } from '../src/food-network-core.js';
-import { generateFoodPhotoWithOpenAI } from '../src/openai-food-image.js';
 
 const PAGE_SLOT = Number(process.env.FOOD_PAGE_SLOT || 5);
 const PAGE_NAME = String(process.env.FOOD_PAGE_NAME || 'Hôm Nay Ăn Gì?').trim();
@@ -13,12 +12,8 @@ const PAGE_HASHTAG = String(process.env.FOOD_PAGE_HASHTAG || '#HomNayAnGi').trim
 const BRAND_LINE_1 = String(process.env.FOOD_BRAND_LINE_1 || 'HÔM NAY').trim();
 const BRAND_LINE_2 = String(process.env.FOOD_BRAND_LINE_2 || 'ĂN GÌ?').trim();
 const BRAND_SUBTITLE = String(process.env.FOOD_BRAND_SUBTITLE || 'MÓN NGON MỖI NGÀY').trim();
-const FOOD_IMAGE_PROVIDER = String(process.env.FOOD_IMAGE_PROVIDER || 'openai').trim().toLowerCase();
-const FOOD_IMAGE_REQUIRED = String(process.env.FOOD_IMAGE_REQUIRED || 'true').toLowerCase() === 'true';
-const OPENAI_API_KEY = String(process.env.OPENAI_API_KEY || '').trim();
-const OPENAI_IMAGE_MODEL = String(process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare').trim();
-const OPENAI_IMAGE_SIZE = String(process.env.OPENAI_IMAGE_SIZE || '1024x1024').trim();
-const OPENAI_IMAGE_QUALITY = String(process.env.OPENAI_IMAGE_QUALITY || 'high').trim();
+const FOOD_IMAGE_PROVIDER = String(process.env.FOOD_IMAGE_PROVIDER || 'library').trim().toLowerCase();
+const MANUAL_TARGET = String(process.env.FOOD_MANUAL_TARGET || 'all').trim().toLowerCase();
 let TOKEN = String(process.env.META_ACCESS_TOKEN || process.env.FACEBOOK_PAGE_ACCESS_TOKEN || '').trim();
 const GRAPH_VERSION = String(process.env.META_GRAPH_VERSION || 'v26.0').trim();
 const PUBLISH = String(process.env.CLOUD_FOOD_PUBLISH || 'false').toLowerCase() === 'true';
@@ -51,6 +46,20 @@ const TRIGGER_HOUR_VN = triggerHourVN(TRIGGER_CRON);
 const SCHEDULE_EVENT = Boolean(TRIGGER_CRON);
 
 fs.mkdirSync(outDir, { recursive: true });
+
+if (!SCHEDULE_EVENT && MANUAL_TARGET !== 'all' && MANUAL_TARGET !== STATE_KEY) {
+  const result = {
+    status:'MANUAL_TARGET_SKIPPED',
+    date:DATE,
+    page:{ id:PAGE_ID, name:PAGE_NAME },
+    state_key:STATE_KEY,
+    requested_target:MANUAL_TARGET,
+    publish_requested:PUBLISH
+  };
+  fs.writeFileSync(path.join(outDir, `${DATE}-manual-target-skipped.json`), JSON.stringify(result,null,2), 'utf8');
+  console.log('CLOUD_FOOD_RESULT='+JSON.stringify(result));
+  process.exit(0);
+}
 
 if (SCHEDULE_EVENT && !SCHEDULE_ENABLED) {
   const result = {
@@ -361,125 +370,69 @@ function brandOverlay({ title, hasPhoto, ingredients }) {
   </svg>`);
 }
 
+function recipeFileStem(id) {
+  return `RID${String(Number(id)).padStart(3,'0')}`;
+}
+
+function libraryImageCandidates(recipe) {
+  const dir = path.resolve(process.cwd(), 'content', 'food-images', STATE_KEY);
+  const stem = recipeFileStem(recipe.id);
+  const exts = ['.jpg','.jpeg','.png','.webp'];
+  return exts.map(ext => path.join(dir, `${stem}${ext}`));
+}
+
+function findLibraryImage(recipe) {
+  return libraryImageCandidates(recipe).find(file => fs.existsSync(file)) || null;
+}
+
 async function buildImage(recipe) {
-  const out = path.join(outDir, `${DATE}-${slug(recipe.title)}.jpg`);
-
-  let generated = null;
-  let generationError = null;
-
-  if (FOOD_IMAGE_PROVIDER === 'openai') {
-    try {
-      console.log('FOOD_IMAGE_GENERATION=START');
-      console.log(`FOOD_IMAGE_MODEL=${OPENAI_IMAGE_MODEL}`);
-
-      generated = await generateFoodPhotoWithOpenAI({
-        recipe,
-        pageName: PAGE_NAME,
-        outDir,
-        date: DATE,
-        stateKey: STATE_KEY,
-        apiKey: OPENAI_API_KEY,
-        model: OPENAI_IMAGE_MODEL,
-        size: OPENAI_IMAGE_SIZE,
-        quality: OPENAI_IMAGE_QUALITY,
-      });
-
-      console.log('FOOD_IMAGE_GENERATION=SUCCESS');
-      console.log(`FOOD_IMAGE_BYTES=${generated.bytes}`);
-    } catch (error) {
-      generationError = error instanceof Error ? error : new Error(String(error));
-
-      console.error('FOOD_IMAGE_GENERATION=FAILED');
-      console.error(`FOOD_IMAGE_ERROR=${generationError.message}`);
-
-      if (FOOD_IMAGE_REQUIRED) {
-        throw generationError;
-      }
-    }
-  } else {
-    generationError = new Error(
-      `FOOD_IMAGE_PROVIDER không hỗ trợ: ${FOOD_IMAGE_PROVIDER}`
-    );
-
-    if (FOOD_IMAGE_REQUIRED) {
-      throw generationError;
-    }
+  if (FOOD_IMAGE_PROVIDER !== 'library') {
+    throw new Error(`FOOD_IMAGE_PROVIDER không hỗ trợ: ${FOOD_IMAGE_PROVIDER}`);
   }
 
-  if (generated?.path) {
-    const input = fs.readFileSync(generated.path);
+  const source = findLibraryImage(recipe);
+  const expectedPath = path.posix.join(
+    'content',
+    'food-images',
+    STATE_KEY,
+    `${recipeFileStem(recipe.id)}.jpg`
+  );
 
-    const base = await sharp(input)
-      .resize(1080, 1080, {
-        fit: 'cover',
-        position: 'centre',
-      })
-      .jpeg({
-        quality: 92,
-      })
-      .toBuffer();
-
-    await sharp(base)
-      .composite([
-        {
-          input: brandOverlay({
-            title: recipe.title,
-            hasPhoto: true,
-            ingredients: recipe.ingredients,
-          }),
-        },
-      ])
-      .jpeg({
-        quality: 92,
-      })
-      .toFile(out);
-
+  if (!source) {
     return {
-      path: out,
-      provider: 'openai',
-      model: generated.model,
-      size: generated.size,
-      quality: generated.quality,
-      promptPath: generated.promptPath,
-      rawImagePath: generated.path,
-      fallback: false,
+      missing:true,
+      provider:'library',
+      expectedPath,
+      acceptedExtensions:['jpg','jpeg','png','webp']
     };
   }
 
-  const blank = {
-    create: {
-      width: 1080,
-      height: 1080,
-      channels: 3,
-      background: '#fff8eb',
-    },
-  };
+  const out = path.join(outDir, `${DATE}-${slug(recipe.title)}.jpg`);
 
-  await sharp(blank)
-    .composite([
-      {
-        input: brandOverlay({
-          title: recipe.title,
-          hasPhoto: false,
-          ingredients: recipe.ingredients,
-        }),
-      },
-    ])
-    .jpeg({
-      quality: 92,
-    })
+  const base = await sharp(source)
+    .rotate()
+    .resize(1080,1080,{ fit:'cover', position:'centre' })
+    .jpeg({ quality:92 })
+    .toBuffer();
+
+  await sharp(base)
+    .composite([{
+      input:brandOverlay({
+        title:recipe.title,
+        hasPhoto:true,
+        ingredients:recipe.ingredients
+      })
+    }])
+    .jpeg({ quality:92 })
     .toFile(out);
 
   return {
-    path: out,
-    provider: 'fallback',
-    model: null,
-    size: null,
-    quality: null,
-    promptPath: null,
-    rawImagePath: null,
-    fallback: true,
-    error: generationError?.message || 'OpenAI image unavailable',
+    missing:false,
+    path:out,
+    provider:'library',
+    sourcePath:source,
+    expectedPath,
+    fallback:false
   };
 }
 
@@ -586,6 +539,28 @@ const rendered = buildRecipePost({ page:{...page,name:PAGE_NAME}, recipe });
 const image = await buildImage(recipe);
 let caption = `${rendered.content}\n\n${PAGE_HASHTAG} ${recipeMarker(recipe.id)}`;
 
+if (image.missing) {
+  const result = {
+    status:'AWAITING_IMAGE',
+    publish_requested:PUBLISH,
+    date:DATE,
+    selected_hour_local:`${String(SELECTED_HOUR_VN).padStart(2,'0')}:00`,
+    trigger_hour_local:TRIGGER_HOUR_VN == null ? null : `${String(TRIGGER_HOUR_VN).padStart(2,'0')}:00`,
+    page:{ id:PAGE_ID, name:PAGE_NAME },
+    recipe:{ id:recipe.id, title:recipe.title, marker:recipeMarker(recipe.id) },
+    image:{
+      provider:'library',
+      expected_path:image.expectedPath,
+      accepted_extensions:image.acceptedExtensions
+    },
+    published:null,
+    caption_preview:caption.slice(0,700)
+  };
+  fs.writeFileSync(path.join(outDir, `${DATE}-result.json`), JSON.stringify(result,null,2),'utf8');
+  console.log('CLOUD_FOOD_RESULT='+JSON.stringify(result));
+  process.exit(0);
+}
+
 let published = null;
 let status = 'DRY_RUN';
 
@@ -622,16 +597,9 @@ const result = {
   image:{
     path:image.path,
     provider:image.provider,
-    model:image.model,
-    size:image.size,
-    quality:image.quality,
-    fallback:Boolean(image.fallback),
-    prompt_path:image.promptPath
-      ? path.relative(process.cwd(), image.promptPath)
-      : null,
-    raw_image_path:image.rawImagePath
-      ? path.relative(process.cwd(), image.rawImagePath)
-      : null
+    source_path:path.relative(process.cwd(), image.sourcePath),
+    expected_path:image.expectedPath,
+    fallback:false
   },
   published,
   caption_preview:caption.slice(0,700)
