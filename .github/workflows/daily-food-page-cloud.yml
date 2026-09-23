@@ -67,7 +67,7 @@ jobs:
       FOOD_IMAGE_PROVIDER: 'openai'
       FOOD_IMAGE_REQUIRED: 'true'
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      OPENAI_IMAGE_MODEL: 'gpt-image-2.5-flare'
+      OPENAI_IMAGE_MODEL: 'gpt-image-2'
       OPENAI_IMAGE_SIZE: '1024x1024'
       OPENAI_IMAGE_QUALITY: 'high'
       META_ACCESS_TOKEN: ${{ secrets.FACEBOOK_SYSTEM_USER_ACCESS_TOKEN || secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
