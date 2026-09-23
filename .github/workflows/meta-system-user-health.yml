@@ -27,11 +27,11 @@ jobs:
         run: |
           set -euo pipefail
           node <<'NODE'
-          const token = String(process.env.META_ACCESS_TOKEN || '').trim();
+          const sourceToken = String(process.env.META_ACCESS_TOKEN || '').trim();
           const version = String(process.env.META_GRAPH_VERSION || 'v26.0').trim();
           const pageId = String(process.env.TARGET_PAGE_ID || '').trim();
 
-          if (!token) {
+          if (!sourceToken) {
             console.error('META_SECRET_PRESENT=NO');
             process.exit(2);
           }
@@ -44,7 +44,7 @@ jobs:
           console.log('TOKEN_VALUE_PRINTED=NO');
           console.log(`TARGET_PAGE_ID=${pageId}`);
 
-          async function graph(pathname) {
+          async function graph(pathname, token = sourceToken) {
             const res = await fetch(`https://graph.facebook.com/${version}/${pathname}`, {
               headers: { Authorization: `Bearer ${token}` }
             });
@@ -58,8 +58,9 @@ jobs:
             return body;
           }
 
+          let me;
           try {
-            const me = await graph('me?fields=id,name');
+            me = await graph('me?fields=id,name');
             console.log('TOKEN_VALID=YES');
             console.log(`TOKEN_ACTOR_ID=${me.id || ''}`);
             console.log(`TOKEN_ACTOR_NAME=${me.name || ''}`);
@@ -70,8 +71,56 @@ jobs:
             process.exit(3);
           }
 
+          let pageToken = '';
+          let tokenMode = '';
+
+          if (String(me?.id || '') === pageId) {
+            pageToken = sourceToken;
+            tokenMode = 'PAGE';
+          }
+
+          if (!pageToken) {
+            try {
+              const target = await graph(`${pageId}?fields=id,name,access_token`);
+              if (target?.access_token) {
+                pageToken = String(target.access_token).trim();
+                tokenMode = 'USER_TO_PAGE';
+              }
+            } catch {}
+          }
+
+          if (!pageToken) {
+            try {
+              const accounts = await graph('me/accounts?fields=id,name,access_token&limit=100');
+              const target = (accounts.data || []).find(x => String(x?.id || '') === pageId);
+              if (target?.access_token) {
+                pageToken = String(target.access_token).trim();
+                tokenMode = 'USER_TO_PAGE_LIST';
+              }
+            } catch {}
+          }
+
+          if (!pageToken) {
+            try {
+              const target = await graph(`${pageId}?fields=id,name`);
+              if (String(target?.id || '') === pageId) {
+                pageToken = sourceToken;
+                tokenMode = 'SYSTEM_USER_DIRECT';
+              }
+            } catch {}
+          }
+
+          if (!pageToken) {
+            console.error('PAGE_TOKEN_RESOLVED=NO');
+            console.error('TARGET_PAGE_ACCESS=NO');
+            process.exit(4);
+          }
+
+          console.log('PAGE_TOKEN_RESOLVED=YES');
+          console.log(`META_TOKEN_MODE=${tokenMode}`);
+
           try {
-            const page = await graph(`${pageId}?fields=id,name`);
+            const page = await graph(`${pageId}?fields=id,name`, pageToken);
             console.log('TARGET_PAGE_ACCESS=YES');
             console.log(`PAGE_ID=${page.id || ''}`);
             console.log(`PAGE_NAME=${page.name || ''}`);
@@ -79,15 +128,17 @@ jobs:
             console.error('TARGET_PAGE_ACCESS=NO');
             console.error(`GRAPH_ERROR_CODE=${e.code}`);
             console.error(`GRAPH_ERROR_TYPE=${e.type}`);
-            process.exit(4);
+            process.exit(5);
           }
 
           try {
-            await graph(`${pageId}/posts?fields=id&limit=1`);
+            await graph(`${pageId}/posts?fields=id&limit=1`, pageToken);
             console.log('TARGET_PAGE_READ_POSTS=YES');
           } catch (e) {
-            console.log('TARGET_PAGE_READ_POSTS=NO');
-            console.log(`READ_POSTS_ERROR_CODE=${e.code}`);
+            console.error('TARGET_PAGE_READ_POSTS=NO');
+            console.error(`READ_POSTS_ERROR_CODE=${e.code}`);
+            console.error(`READ_POSTS_ERROR_TYPE=${e.type}`);
+            process.exit(6);
           }
 
           console.log('RESULT=META_PAGE_ACCESS_READY');
