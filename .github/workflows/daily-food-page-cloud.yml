@@ -29,10 +29,41 @@ concurrency:
 
 jobs:
   daily-food:
+    if: ${{ github.event_name != 'schedule' || matrix.schedule_enabled == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - page_id: '1358329424025816'
+            page_name: 'Hôm Nay Ăn Gì?'
+            page_slot: 5
+            state_key: 'hom-nay-an-gi'
+            hashtag: '#HomNayAnGi'
+            brand_line_1: 'HÔM NAY'
+            brand_line_2: 'ĂN GÌ?'
+            brand_subtitle: 'MÓN NGON MỖI NGÀY'
+            schedule_enabled: true
+          - page_id: '1438142366038184'
+            page_name: 'Món Ngon Mỗi Ngày'
+            page_slot: 6
+            state_key: 'mon-ngon-moi-ngay'
+            hashtag: '#MonNgonMoiNgay'
+            brand_line_1: 'MÓN NGON'
+            brand_line_2: 'MỖI NGÀY'
+            brand_subtitle: 'CÔNG THỨC DỄ LÀM'
+            schedule_enabled: false
     env:
-      FACEBOOK_PAGE_ID: '1358329424025816'
+      FACEBOOK_PAGE_ID: ${{ matrix.page_id }}
+      FOOD_PAGE_NAME: ${{ matrix.page_name }}
+      FOOD_PAGE_SLOT: ${{ matrix.page_slot }}
+      FOOD_STATE_KEY: ${{ matrix.state_key }}
+      FOOD_PAGE_HASHTAG: ${{ matrix.hashtag }}
+      FOOD_BRAND_LINE_1: ${{ matrix.brand_line_1 }}
+      FOOD_BRAND_LINE_2: ${{ matrix.brand_line_2 }}
+      FOOD_BRAND_SUBTITLE: ${{ matrix.brand_subtitle }}
       META_ACCESS_TOKEN: ${{ secrets.FACEBOOK_SYSTEM_USER_ACCESS_TOKEN || secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
       META_GRAPH_VERSION: ${{ vars.META_GRAPH_VERSION || 'v26.0' }}
       FOOD_DATE: ${{ inputs.date }}
@@ -63,12 +94,22 @@ jobs:
           set -e
           git config user.name "social-manager-bot"
           git config user.email "social-manager-bot@users.noreply.github.com"
-          git add content/hom-nay-an-gi-recipe-state.json content/hom-nay-an-gi-recipe-state.csv
+
+          STATE_JSON="content/${FOOD_STATE_KEY}-recipe-state.json"
+          STATE_CSV="content/${FOOD_STATE_KEY}-recipe-state.csv"
+
+          for file in "$STATE_JSON" "$STATE_CSV"; do
+            if [ -e "$file" ]; then
+              git add "$file"
+            fi
+          done
+
           if git diff --cached --quiet; then
-            echo "No recipe state changes."
+            echo "No recipe state changes for ${FOOD_PAGE_NAME}."
             exit 0
           fi
-          git commit -m "Update Hôm Nay Ăn Gì recipe state"
+
+          git commit -m "Update ${FOOD_PAGE_NAME} recipe state"
           git pull --rebase origin stable
           git push origin HEAD:stable
 
@@ -76,7 +117,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: daily-food-${{ github.run_id }}
-          path: artifacts/cloud-food/
+          name: daily-food-${{ matrix.state_key }}-${{ github.run_id }}
+          path: artifacts/cloud-food/${{ matrix.state_key }}/
           if-no-files-found: warn
           retention-days: 30
