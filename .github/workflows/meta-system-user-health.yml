@@ -1,4 +1,4 @@
-name: Meta System User Health
+name: Meta Access Health
 
 on:
   workflow_dispatch:
@@ -7,17 +7,17 @@ on:
         description: 'Facebook Page ID to verify'
         required: true
         type: string
-        default: '61594802124268'
+        default: '1358329424025816'
 
 permissions:
   contents: read
 
 jobs:
-  verify-meta-system-user:
+  verify-meta-access:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      META_ACCESS_TOKEN: ${{ secrets.FACEBOOK_SYSTEM_USER_ACCESS_TOKEN }}
+      META_ACCESS_TOKEN: ${{ secrets.FACEBOOK_SYSTEM_USER_ACCESS_TOKEN || secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
       META_GRAPH_VERSION: ${{ vars.META_GRAPH_VERSION || 'v26.0' }}
       TARGET_PAGE_ID: ${{ inputs.page_id }}
 
@@ -32,7 +32,7 @@ jobs:
           const pageId = String(process.env.TARGET_PAGE_ID || '').trim();
 
           if (!token) {
-            console.error('SYSTEM_USER_SECRET_PRESENT=NO');
+            console.error('META_SECRET_PRESENT=NO');
             process.exit(2);
           }
           if (!/^\d+$/.test(pageId)) {
@@ -40,7 +40,7 @@ jobs:
             process.exit(2);
           }
 
-          console.log('SYSTEM_USER_SECRET_PRESENT=YES');
+          console.log('META_SECRET_PRESENT=YES');
           console.log('TOKEN_VALUE_PRINTED=NO');
           console.log(`TARGET_PAGE_ID=${pageId}`);
 
@@ -90,5 +90,5 @@ jobs:
             console.log(`READ_POSTS_ERROR_CODE=${e.code}`);
           }
 
-          console.log('RESULT=SYSTEM_USER_PAGE_ACCESS_READY');
+          console.log('RESULT=META_PAGE_ACCESS_READY');
           NODE
