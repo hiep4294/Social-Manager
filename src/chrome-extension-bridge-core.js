@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-export const CHROME_EXTENSION_ACTIONS = Object.freeze(['create_page', 'post_page']);
+export const CHROME_EXTENSION_ACTIONS = Object.freeze(['generate_food_image', 'create_page', 'post_page']);
 
 export function extensionActionSupported(action) {
   return CHROME_EXTENSION_ACTIONS.includes(String(action || '').trim());
