@@ -46,6 +46,7 @@ for (const dir of [IMAGE_ROOT, SYSTEM_ROOT, JOB_ROOT, LOG_ROOT, FAILED_ROOT, TEM
 }
 
 const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+fs.mkdirSync(path.dirname(DB_PATH), { recursive:true });
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 ensureOperatorSchema(db);
