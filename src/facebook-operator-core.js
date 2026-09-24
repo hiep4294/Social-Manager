@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { cleanFacebookUrl, ensureGroupMonitorSchema, normalizeGroupMonitor } from './group-monitor-core.js';
 
 export const OPERATOR_ACTIONS = new Set([
+  'generate_food_image',
   'create_page',
   'post_page',
   'create_group',
@@ -51,6 +52,16 @@ export function normalizeOperatorJob(input = {}) {
     const parsed = new Date(scheduledRaw);
     if (Number.isNaN(parsed.getTime())) return { ok: false, error: 'scheduled_at không hợp lệ' };
     scheduledAt = parsed.toISOString();
+  }
+
+  if (action === 'generate_food_image') {
+    payload.prompt = String(payload.prompt || '').trim();
+    payload.recipe_code = String(payload.recipe_code || '').trim().toUpperCase();
+    payload.recipe_title = String(payload.recipe_title || '').trim();
+    payload.page_key = String(payload.page_key || '').trim().toLowerCase();
+    if (!payload.prompt) return { ok: false, error: 'generate_food_image cần prompt' };
+    if (!/^RID\d{3,5}$/.test(payload.recipe_code)) return { ok: false, error: 'generate_food_image cần recipe_code dạng RIDxxx' };
+    if (!payload.recipe_title) return { ok: false, error: 'generate_food_image cần recipe_title' };
   }
 
   if (action === 'create_page') {
