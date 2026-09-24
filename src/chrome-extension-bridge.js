@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { ensureOperatorSchema } from './facebook-operator-core.js';
@@ -20,6 +21,13 @@ function safeEqual(a, b) {
   const aa = Buffer.from(String(a || ''));
   const bb = Buffer.from(String(b || ''));
   return aa.length === bb.length && crypto.timingSafeEqual(aa, bb);
+}
+
+function defaultFoodImageRoot() {
+  const base = process.env.OneDrive
+    ? path.join(process.env.OneDrive, 'Documents')
+    : path.join(process.env.USERPROFILE || os.homedir(), 'Documents');
+  return path.join(base, 'anh-mon-an');
 }
 
 function readJsonBody(req, maxBytes = 128 * 1024) {
@@ -86,6 +94,8 @@ if (!enabled) {
   fs.mkdirSync(publicDir, { recursive: true });
 
   const dbPath = process.env.SOCIAL_MANAGER_DB || path.join(dataDir, 'social-manager.db');
+  const foodImageRoot = path.resolve(process.env.FOOD_IMAGE_ROOT || defaultFoodImageRoot());
+  fs.mkdirSync(foodImageRoot, { recursive: true });
   const db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
   ensureBridgeSchema(db);
@@ -96,7 +106,7 @@ if (!enabled) {
   const reservationTtlMs = Math.max(heartbeatTtlMs, Number(process.env.CHROME_EXTENSION_RESERVATION_TTL_MS || 60_000));
   const statusPath = path.join(publicDir, 'chrome-extension-status.json');
   const statePath = path.join(dataDir, 'chrome-extension-bridge.json');
-  const expectedVersion = '2.0.0';
+  const expectedVersion = '2.1.0';
 
   function newState() {
     return {
@@ -256,6 +266,55 @@ if (!enabled) {
     };
   }
 
+  function assetMime(file) {
+    const ext = path.extname(file).toLowerCase();
+    if (ext === '.png') return 'image/png';
+    if (ext === '.webp') return 'image/webp';
+    return 'image/jpeg';
+  }
+
+  function serveJobAsset(url, res) {
+    const match = url.pathname.match(/^\/v1\/assets\/([^/]+)$/);
+    if (!match) return false;
+
+    const jobId = decodeURIComponent(match[1]);
+    const token = String(url.searchParams.get('token') || '');
+    const job = db.prepare('SELECT payload_json FROM facebook_operator_jobs WHERE id=?').get(jobId);
+    if (!job) {
+      sendJson(res, 404, { ok:false, error:'Asset job không tồn tại' });
+      return true;
+    }
+
+    let payload = {};
+    try { payload = JSON.parse(job.payload_json || '{}'); } catch {}
+    if (!token || !safeEqual(token, String(payload.asset_token || ''))) {
+      sendJson(res, 403, { ok:false, error:'Asset token không hợp lệ' });
+      return true;
+    }
+
+    const file = path.resolve(String(payload.local_image_path || ''));
+    const relative = path.relative(foodImageRoot, file);
+    if (!file || relative.startsWith('..') || path.isAbsolute(relative)) {
+      sendJson(res, 403, { ok:false, error:'Asset nằm ngoài kho ảnh cho phép' });
+      return true;
+    }
+    if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
+      sendJson(res, 404, { ok:false, error:'Asset file không tồn tại' });
+      return true;
+    }
+
+    const body = fs.readFileSync(file);
+    res.writeHead(200, {
+      'content-type': assetMime(file),
+      'content-length': body.length,
+      'cache-control': 'no-store',
+      'access-control-allow-origin': '*',
+      'x-content-type-options': 'nosniff'
+    });
+    res.end(body);
+    return true;
+  }
+
   function finishJob(input) {
     const id = String(input?.id || '').trim();
     const status = String(input?.status || '').trim().toUpperCase();
@@ -285,6 +344,20 @@ if (!enabled) {
   async function handle(req, res) {
     try {
       const url = new URL(req.url || '/', `http://${host}:${port}`);
+      if (req.method === 'OPTIONS' && url.pathname.startsWith('/v1/assets/')) {
+        res.writeHead(204, {
+          'access-control-allow-origin': '*',
+          'access-control-allow-methods': 'GET,OPTIONS',
+          'cache-control': 'no-store'
+        });
+        res.end();
+        return;
+      }
+
+      if (req.method === 'GET' && url.pathname.startsWith('/v1/assets/')) {
+        if (serveJobAsset(url, res)) return;
+      }
+
       if (req.method === 'GET' && url.pathname === '/v1/health') {
         return sendJson(res, 200, {
           ok: true,
