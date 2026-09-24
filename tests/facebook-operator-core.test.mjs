@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
 import { enqueueOperatorJob, ensureOperatorSchema, normalizeOperatorJob } from '../src/facebook-operator-core.js';
 
+assert.equal(normalizeOperatorJob({ action: 'generate_food_image', payload: { prompt: 'Tạo ảnh món ăn', recipe_code: 'RID015', recipe_title: 'Tôm rang thịt', page_key: 'mon-ngon-moi-ngay' } }).ok, true);
+assert.equal(normalizeOperatorJob({ action: 'generate_food_image', payload: { prompt: 'Tạo ảnh món ăn', recipe_code: 'BAD', recipe_title: 'Tôm rang thịt' } }).ok, false);
 assert.equal(normalizeOperatorJob({ action: 'create_page', payload: { name: 'KODS Hà Nội', category: 'Business' } }).ok, true);
 assert.equal(normalizeOperatorJob({ action: 'create_page', payload: {} }).ok, false);
 assert.equal(normalizeOperatorJob({ action: 'create_group', payload: { name: 'Hội kỹ thuật', privacy: 'PUBLIC' } }).ok, true);
