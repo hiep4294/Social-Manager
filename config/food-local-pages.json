@@ -2,7 +2,14 @@
   "version": 1,
   "schedule": {
     "mode": "deterministic_daily_window",
-    "hours_vn": [8, 9, 10, 11, 12, 13],
+    "hours_vn": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13
+    ],
     "catch_up_hours": 6,
     "tick_seconds": 15
   },
@@ -15,7 +22,8 @@
   "publish": {
     "provider": "facebook_extension",
     "max_attempts": 1,
-    "require_verified": true
+    "require_verified": true,
+    "enabled": false
   },
   "pages": [
     {
