@@ -49,5 +49,6 @@
   "action": {
     "default_popup": "popup.html",
     "default_title": "Social Manager"
-  }
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtHCezVu6sG30+YZ2eIWGpll3cxK8YM/qgeabXSWgE7YMXewMAsUBu++tEJ41g6qqyTspGunpemcPLByi8fMCrkIR+pDu6N8SkKMe1RNx8MzEY7vTv9IHBjinO6eOvXnxGZGkoIbrypHDafOfOtDz41W+7sPpR1brRuQyGFQFeDl12KRm/E2phgQcGhvvFjSF3YrYU5OldyOXoBNjqHQpHUGKVg+P6jQiPW0KKCENEu/0r5Rt2PSXjfBIRRc3V5p222ueXgl1qQBUo6USxdMnfRYcg8Wx3nLxyotAvYaPeupqJuy7XiUDCfMmb0Kfm9RICfqSiqlSqO4vfx/SVyyDIwIDAQAB"
 }
