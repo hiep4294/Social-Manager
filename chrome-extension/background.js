@@ -8,6 +8,7 @@ import {
   reportBridgeJob
 } from './bridge-client.js';
 import { runFacebookJob } from './operator-runner.js';
+import { runChatGPTImageJob } from './chatgpt-runner.js';
 
 const POLL_ALARM = 'social-manager-poll';
 let busy = false;
@@ -48,7 +49,9 @@ async function poll() {
     }
     let execution;
     try {
-      execution = await runFacebookJob(job);
+      execution = job.action === 'generate_food_image'
+        ? await runChatGPTImageJob(job)
+        : await runFacebookJob(job);
     } catch (error) {
       execution = { status: 'FAILED', error: String(error?.message || error), result: { extension_error: true } };
     }
