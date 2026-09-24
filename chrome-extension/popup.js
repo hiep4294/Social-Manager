@@ -48,3 +48,20 @@ document.getElementById('poll').addEventListener('click', async () => {
   await refresh();
 });
 refresh();
+
+
+async function autoPairFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const code = String(params.get('pair') || '').trim();
+  if (!/^\d{6}$/.test(code)) return;
+  history.replaceState({}, '', location.pathname);
+  const input = document.getElementById('code');
+  if (input) input.value = code;
+  const result = await send({ type: 'PAIR', code });
+  if (!result?.ok) {
+    console.error('AUTO_PAIR_FAILED', result?.error || 'unknown');
+    return;
+  }
+  await refresh();
+}
+autoPairFromUrl().catch(() => {});
