@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "schedule": {
+    "mode": "deterministic_daily_window",
+    "hours_vn": [8, 9, 10, 11, 12, 13],
+    "catch_up_hours": 6,
+    "tick_seconds": 15
+  },
+  "image_generation": {
+    "provider": "chatgpt_extension",
+    "max_attempts": 2,
+    "job_timeout_minutes": 15,
+    "min_source_bytes": 10000
+  },
+  "publish": {
+    "provider": "facebook_extension",
+    "max_attempts": 1,
+    "require_verified": true
+  },
+  "pages": [
+    {
+      "enabled": true,
+      "page_id": "1358329424025816",
+      "page_url": "https://www.facebook.com/1358329424025816",
+      "page_name": "Hôm Nay Ăn Gì?",
+      "page_key": "hom-nay-an-gi",
+      "page_slot": 5,
+      "hashtag": "#HomNayAnGi",
+      "brand": {
+        "line_1": "HÔM NAY",
+        "line_2": "ĂN GÌ?",
+        "subtitle": "MÓN NGON MỖI NGÀY",
+        "layout": "food-square-v1"
+      }
+    },
+    {
+      "enabled": true,
+      "page_id": "1438142366038184",
+      "page_url": "https://www.facebook.com/1438142366038184",
+      "page_name": "Món Ngon Mỗi Ngày",
+      "page_key": "mon-ngon-moi-ngay",
+      "page_slot": 6,
+      "hashtag": "#MonNgonMoiNgay",
+      "brand": {
+        "line_1": "MÓN NGON",
+        "line_2": "MỖI NGÀY",
+        "subtitle": "CÔNG THỨC DỄ LÀM",
+        "layout": "food-square-v1"
+      }
+    }
+  ]
+}
