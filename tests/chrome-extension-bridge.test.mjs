@@ -8,6 +8,7 @@ import {
   extensionStatusIsHealthy
 } from '../src/chrome-extension-bridge-core.js';
 
+assert.equal(extensionActionSupported('generate_food_image'), true);
 assert.equal(extensionActionSupported('create_page'), true);
 assert.equal(extensionActionSupported('post_page'), true);
 assert.equal(extensionActionSupported('post_group'), false);
