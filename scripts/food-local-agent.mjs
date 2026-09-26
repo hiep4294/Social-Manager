@@ -231,16 +231,50 @@ function chooseRecipe(page, state, date) {
   });
 }
 
-function buildImagePrompt(recipe) {
+function buildImageSubtitle(recipe) {
+  const byCategory = {
+    gia_dinh:'Đậm vị, dễ ăn, hợp bữa cơm gia đình',
+    mon_nuoc:'Ấm bụng, dễ ăn, hợp cho cả gia đình',
+    mon_soi:'Nhanh gọn, đậm vị, dễ làm tại nhà',
+    chay:'Thanh nhẹ, dễ ăn, ngon mà không ngán',
+    hai_san:'Tươi ngon, đậm vị, hấp dẫn tại nhà',
+    chien:'Vàng giòn, thơm ngon, dễ làm tại nhà',
+    an_vat:'Ăn vui, dễ làm, hợp cho buổi xế',
+    nuong:'Thơm nức, đậm vị, hợp dịp cuối tuần',
+    banh:'Dễ làm tại nhà, thơm ngon và đẹp mắt',
+    trang_mieng:'Ngọt dịu, dễ làm, dùng lạnh càng ngon',
+    do_uong:'Tươi mát, dễ uống, làm nhanh tại nhà',
+    rau_cu:'Tươi ngon, cân bằng, hợp bữa ăn hằng ngày'
+  };
+  return byCategory[recipe.category] || 'Ngon dễ làm, hợp cho bữa ăn hằng ngày';
+}
+
+function buildImagePrompt(page, recipe) {
   const ingredients = (recipe.ingredients || []).slice(0, 5).join(', ');
+  const pageTitle = String(page.page_name || 'Hôm Nay Ăn Gì?').trim();
+  const subtitle = buildImageSubtitle(recipe);
+
   return [
-    `Tạo 1 ảnh food photography chân thực cho món Việt Nam "${recipe.title}".`,
+    'Tạo một ảnh vuông 1:1 chất lượng cao để đăng Facebook, phong cách food poster hiện đại và bắt mắt.',
+    `Chủ đề chính là món Việt Nam "${recipe.title}".`,
     ingredients ? `Nguyên liệu nhận diện chính: ${ingredients}.` : '',
-    'Món ăn hoàn chỉnh là chủ thể chính, trình bày ngon mắt, tự nhiên, đúng đặc trưng món Việt.',
-    'Ánh sáng tự nhiên mềm, màu thực phẩm chân thực, góc chụp khoảng 45 độ.',
-    'Khung vuông 1:1, chất lượng cao, món ăn rõ nét.',
-    'Không người, không bàn tay, không chữ, không logo, không watermark, không ký tự hoặc số.',
-    'Chừa khoảng trống hợp lý ở góc trên trái và phần dưới để hệ thống ghép nhận diện thương hiệu sau.'
+    '',
+    'BỐ CỤC BẮT BUỘC:',
+    `- Phần trên cùng có tiêu đề lớn tiếng Việt chính xác: "${pageTitle}".`,
+    `- Ngay bên dưới có tên món nổi bật, viết chính xác: "${recipe.title}".`,
+    `- Có một dòng mô tả ngắn, viết chính xác: "${subtitle}".`,
+    '- Món ăn hoàn chỉnh chiếm phần lớn nửa dưới ảnh, nhìn ngon, nóng hổi và chân thực.',
+    '- Có thể dùng các mảng brush-stroke, bảng màu nâu ấm, vàng, kem và xanh lá giống poster ẩm thực hiện đại.',
+    '- Typography tiếng Việt phải rõ ràng, đúng dấu, dễ đọc trên điện thoại.',
+    '',
+    'PHONG CÁCH HÌNH ẢNH:',
+    '- Food photography chân thực, ánh sáng ấm tự nhiên, góc chụp khoảng 45 độ.',
+    '- Màu thực phẩm tự nhiên, món ăn rõ nét, bố cục sạch, không rối.',
+    '- Có thể thêm rau hoặc nguyên liệu phụ phù hợp để ảnh cân đối nhưng không làm sai đặc trưng món.',
+    '- Không người, không bàn tay, không watermark, không logo thương hiệu, không thêm chữ ngoài 3 dòng đã yêu cầu.',
+    '- Không sai chính tả tiếng Việt; không đổi tên món; không tự thêm giá, số điện thoại hay thông tin quảng cáo.',
+    '',
+    'Mục tiêu: ảnh phải trông như một bài post Facebook hoàn chỉnh, có thể dùng ngay để đăng mà không cần ghép thêm tiêu đề.'
   ].filter(Boolean).join('\n');
 }
 
@@ -403,225 +437,32 @@ async function composeFinal(page, recipe) {
   const p = mealPaths(recipe);
 
   if (!fs.existsSync(p.source)) {
-    throw new Error(
-      'Thiếu source.png để ghép nhận diện'
-    );
+    throw new Error('Thiếu source.png từ ChatGPT');
   }
 
-  fs.mkdirSync(
+  fs.mkdirSync(p.finalDir, { recursive:true });
+
+  const finalPath = path.join(
     p.finalDir,
-    { recursive:true }
+    `${page.page_key}.jpg`
   );
 
-  /*
-   * Real Page logo is mandatory.
-   * Missing logo blocks composition.
-   */
-  const logoPath =
-    path.join(
-      LOGO_ROOT,
-      `${page.page_key}.png`
-    );
-
-  if (
-    !fs.existsSync(logoPath) ||
-    !fs.statSync(logoPath).isFile()
-  ) {
-    throw new Error(
-      `MISSING_PAGE_LOGO:${page.page_key}`
-    );
-  }
-
-  const logoMeta =
-    await sharp(logoPath).metadata();
-
-  if (logoMeta.format !== 'png') {
-    throw new Error(
-      `INVALID_PAGE_LOGO_FORMAT:${page.page_key}:${logoMeta.format || 'unknown'}`
-    );
-  }
-
-  if (
-    !logoMeta.width ||
-    !logoMeta.height ||
-    logoMeta.width < 256 ||
-    logoMeta.height < 256
-  ) {
-    throw new Error(
-      `PAGE_LOGO_TOO_SMALL:${page.page_key}`
-    );
-  }
-
-  const logoBytes =
-    fs.readFileSync(logoPath);
-
-  const logoSha256 =
-    crypto
-      .createHash('sha256')
-      .update(logoBytes)
-      .digest('hex');
-
-  /*
-   * Approved visual treatment:
-   * - trim exterior white margin
-   * - 138x138
-   * - transparent canvas
-   * - position 58,58
-   * - no white plate
-   */
-  const logoBuffer =
-    await sharp(logoPath)
-      .rotate()
-      .trim({
-        background:{
-          r:255,
-          g:255,
-          b:255,
-          alpha:1
-        },
-        threshold:12
-      })
-      .resize(138, 138, {
-        fit:'contain',
-        background:{
-          r:255,
-          g:255,
-          b:255,
-          alpha:0
-        }
-      })
-      .png()
-      .toBuffer();
-
-  const titleLines =
-    wrapWords(
-      String(recipe.title || '').toUpperCase(),
-      18
-    );
-
-  let titleStartY = 885;
-  let titleStep = 70;
-  let titleFont = 72;
-
-  if (titleLines.length === 2) {
-    titleStartY = 805;
-    titleFont = 62;
-  } else if (titleLines.length >= 3) {
-    titleStartY = 755;
-    titleFont = 54;
-  }
-
-  const titleSvg =
-    titleLines
-      .map((line, i) =>
-        `<text
-          x="72"
-          y="${titleStartY + i * titleStep}"
-          font-family="Arial,Segoe UI,sans-serif"
-          font-size="${titleFont}"
-          font-weight="900"
-          fill="#ffffff"
-        >${xml(line)}</text>`
-      )
-      .join('');
-
-  const overlay =
-    Buffer.from(`
-    <svg
-      width="1080"
-      height="1080"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <defs>
-        <linearGradient
-          id="bottomFade"
-          x1="0"
-          y1="0"
-          x2="0"
-          y2="1"
-        >
-          <stop
-            offset="0"
-            stop-color="#000000"
-            stop-opacity="0"
-          />
-          <stop
-            offset="1"
-            stop-color="#241208"
-            stop-opacity="0.78"
-          />
-        </linearGradient>
-      </defs>
-
-      <rect
-        x="0"
-        y="680"
-        width="1080"
-        height="400"
-        fill="url(#bottomFade)"
-      />
-
-      ${titleSvg}
-
-      <text
-        x="74"
-        y="952"
-        font-family="Arial,Segoe UI,sans-serif"
-        font-size="30"
-        font-weight="700"
-        fill="#fff0d6"
-      >Món ngon dễ làm cho bữa cơm gia đình</text>
-
-      <text
-        x="74"
-        y="1018"
-        font-family="Arial,Segoe UI,sans-serif"
-        font-size="25"
-        font-weight="700"
-        fill="#ffe2b5"
-      >${xml(page.hashtag || '')}</text>
-    </svg>
-    `);
-
-  const finalPath =
-    path.join(
-      p.finalDir,
-      `${page.page_key}.jpg`
-    );
-
-  const base =
-    await sharp(p.source)
-      .rotate()
-      .resize(1080, 1080, {
-        fit:'cover',
-        position:'centre'
-      })
-      .jpeg({
-        quality:94
-      })
-      .toBuffer();
-
-  await sharp(base)
-    .composite([
-      {
-        input:overlay,
-        top:0,
-        left:0
-      },
-      {
-        input:logoBuffer,
-        top:58,
-        left:58
-      }
-    ])
+  // ChatGPT now creates the complete poster including Page title,
+  // recipe title and subtitle. Only normalize to Facebook-ready
+  // 1080x1080; do not add a second title/logo layer.
+  await sharp(p.source)
+    .rotate()
+    .resize(1080, 1080, {
+      fit:'cover',
+      position:'centre'
+    })
     .jpeg({
       quality:94,
       chromaSubsampling:'4:4:4'
     })
     .toFile(finalPath);
 
-  const finalMeta =
-    await sharp(finalPath).metadata();
+  const finalMeta = await sharp(finalPath).metadata();
 
   if (
     finalMeta.width !== 1080 ||
@@ -632,38 +473,28 @@ async function composeFinal(page, recipe) {
     );
   }
 
-  const meta =
-    safeJsonRead(p.meta, {}) || {};
-
-  meta.final =
-    meta.final || {};
+  const meta = safeJsonRead(p.meta, {}) || {};
+  meta.final = meta.final || {};
 
   meta.final[page.page_key] = {
     path:finalPath,
     bytes:fs.statSync(finalPath).size,
     width:finalMeta.width,
     height:finalMeta.height,
-    layout:'food-square-real-logo-v2',
-    logo:{
-      path:logoPath,
-      sha256:logoSha256,
-      source_width:logoMeta.width,
-      source_height:logoMeta.height,
-      rendered_width:138,
-      rendered_height:138,
-      top:58,
-      left:58
+    layout:'chatgpt-food-poster-v3',
+    source:'chatgpt_generated_complete_poster',
+    text:{
+      page_title:String(page.page_name || ''),
+      recipe_title:String(recipe.title || ''),
+      subtitle:buildImageSubtitle(recipe)
     },
     composed_at:nowIso()
   };
 
-  writeJsonAtomic(
-    p.meta,
-    meta
-  );
-
+  writeJsonAtomic(p.meta, meta);
   return finalPath;
 }
+
 function enqueueImageJob(page, recipe, job) {
   job.image_attempts = Number(job.image_attempts || 0) + 1;
   const id = `foodimg-${job.date}-${page.page_key}-${recipeCode(recipe.id)}-a${job.image_attempts}`;
@@ -671,7 +502,7 @@ function enqueueImageJob(page, recipe, job) {
     id,
     action:'generate_food_image',
     payload:{
-      prompt:buildImagePrompt(recipe),
+      prompt:buildImagePrompt(page, recipe),
       recipe_code:recipeCode(recipe.id),
       recipe_title:recipe.title,
       page_key:page.page_key
@@ -924,7 +755,7 @@ async function bridgeHealth() {
 async function ensureBridge() {
   let health = await bridgeHealth();
   if (health?.ok) {
-    if (String(health.expected_version || '') !== '2.1.0') {
+    if (String(health.expected_version || '') !== '2.1.3') {
       throw new Error(`Bridge đang chạy phiên bản cũ expected_version=${health.expected_version || 'unknown'}; cần restart`);
     }
     return health;
