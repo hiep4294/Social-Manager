@@ -624,32 +624,52 @@ export async function executePostPage(page, payload, db) {
               postData.includes(encodeURIComponent(marker))
             );
 
-          const looksLikePublish =
-            markerInRequest ||
-            friendlyName === 'ComposerStoryCreateMutation';
+          const media = analyzeMedia(variablesRaw);
+          const isInterception =
+            /InterceptionRequestHandler/i.test(friendlyName);
 
-          if (!looksLikePublish) {
-            await cdp.send('Fetch.continueRequest', { requestId });
+          const looksLikeFinalPublish =
+            friendlyName === 'ComposerStoryCreateMutation' ||
+            (
+              !isInterception &&
+              /Composer.*(?:Story|Post|Publish|Create).*Mutation/i.test(friendlyName)
+            ) ||
+            (
+              !isInterception &&
+              markerInRequest &&
+              /Mutation$/i.test(friendlyName)
+            );
+
+          const shouldRecord =
+            markerInRequest ||
+            isInterception ||
+            looksLikeFinalPublish;
+
+          if (shouldRecord) {
+            captured.push({
+              elapsed_ms: Date.now() - armedAt,
+              url: String(request.url || ''),
+              friendly_name: friendlyName,
+              doc_id: docId,
+              marker_in_request: markerInRequest,
+              is_interception: isInterception,
+              is_final_publish_candidate: looksLikeFinalPublish,
+              aborted: looksLikeFinalPublish,
+              variables_length: variablesRaw.length,
+              has_media_reference: media.has_media_reference,
+              media_hints: media.media_hints
+            });
+          }
+
+          if (looksLikeFinalPublish) {
+            await cdp.send('Fetch.failRequest', {
+              requestId,
+              errorReason: 'Aborted'
+            });
             return;
           }
 
-          const media = analyzeMedia(variablesRaw);
-
-          captured.push({
-            elapsed_ms: Date.now() - armedAt,
-            url: String(request.url || ''),
-            friendly_name: friendlyName,
-            doc_id: docId,
-            marker_in_request: markerInRequest,
-            variables_length: variablesRaw.length,
-            has_media_reference: media.has_media_reference,
-            media_hints: media.media_hints
-          });
-
-          await cdp.send('Fetch.failRequest', {
-            requestId,
-            errorReason: 'Aborted'
-          });
+          await cdp.send('Fetch.continueRequest', { requestId });
         } catch {
           await cdp.send('Fetch.continueRequest', { requestId }).catch(() => {});
         }
@@ -697,13 +717,19 @@ export async function executePostPage(page, payload, db) {
           }
         }
 
-        if (captured.length > 0) break;
+        if (captured.some(item => item.aborted === true)) break;
         await sleep(300);
       }
 
-      // Keep the CDP interceptor armed briefly after the UI interaction in
-      // case Facebook submits asynchronously after dismissing the promotion.
-      for (let attempt = 0; attempt < 20 && captured.length === 0; attempt += 1) {
+      // Keep the CDP interceptor armed until the final publish mutation is
+      // observed or the bounded settle window expires. The earlier
+      // interception query is intentionally allowed to complete.
+      for (
+        let attempt = 0;
+        attempt < 32 &&
+        !captured.some(item => item.aborted === true);
+        attempt += 1
+      ) {
         await sleep(250);
       }
 
@@ -723,7 +749,7 @@ export async function executePostPage(page, payload, db) {
           page_url: target.url,
           requested_image: Boolean(payload.image_url),
           dedupe_marker: marker,
-          publish_aborted: captured.length > 0,
+          publish_aborted: captured.some(item => item.aborted === true),
           interception_dismissed: interceptionDismissed,
           requests: captured
         }, null, 2),
@@ -734,7 +760,7 @@ export async function executePostPage(page, payload, db) {
         ok: true,
         dry_run: true,
         diagnostic_capture_graphql: true,
-        publish_aborted: captured.length > 0,
+        publish_aborted: captured.some(item => item.aborted === true),
         requested_image: Boolean(payload.image_url),
         interception_dismissed: interceptionDismissed,
         captured_count: captured.length,
