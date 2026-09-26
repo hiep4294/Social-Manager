@@ -34,7 +34,10 @@
     "test:smoke": "node scripts/smoke-test.mjs",
     "test": "npm run test:facebook && npm run test:engagement && npm run test:operator && npm run test:group-monitor && npm run test:meta && npm run test:mcp && npm run test:bridge && npm run test:image && npm run test:auto && npm run test:food && npm run test:smoke",
     "food:auto": "node scripts/food-local-agent.mjs",
-    "food:auto:doctor": "node scripts/food-local-agent.mjs --doctor"
+    "food:auto:doctor": "node scripts/food-local-agent.mjs --doctor",
+    "food:auto:autostart:install": "node scripts/manage-food-local-agent-autostart.mjs install",
+    "food:auto:autostart:status": "node scripts/manage-food-local-agent-autostart.mjs status",
+    "food:auto:autostart:remove": "node scripts/manage-food-local-agent-autostart.mjs remove"
   },
   "dependencies": {
     "@modelcontextprotocol/node": "^2.0.0",
