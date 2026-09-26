@@ -561,9 +561,17 @@ async function processImageStage(page, recipe, job) {
     return true;
   }
 
-  if (fs.existsSync(p.source) && !sourceIsCurrentPoster) {
-    job.stale_source_detected = true;
-    job.stale_source_layout = sourceMeta?.source?.layout || 'legacy-unversioned';
+  if (!sourceIsCurrentPoster) {
+    if (fs.existsSync(p.source)) {
+      job.stale_source_detected = true;
+      job.stale_source_layout = sourceMeta?.source?.layout || 'legacy-unversioned';
+    }
+
+    // Never reuse a final image composed from a legacy source.
+    if (job.final_path) {
+      job.legacy_final_path = job.final_path;
+      job.final_path = null;
+    }
   }
 
   if (!job.image_job_id) {
