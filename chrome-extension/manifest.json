@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Social Manager Facebook Operator",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "Chrome operator for Social Manager. Handles Facebook publishing and ChatGPT food-image generation through a localhost bridge.",
   "permissions": [
     "storage",
