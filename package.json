@@ -1,8 +1,8 @@
 {
   "name": "social-manager",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "private": true,
-  "description": "Social Manager V2.1.1 with local full-auto food image generation, branded composition and verified Facebook media publishing.",
+  "description": "Social Manager V2.1.2 with detailed cooking recipes, branded food-image generation and verified Facebook media publishing.",
   "type": "module",
   "scripts": {
     "prestart": "node scripts/food-network-plan.mjs",
@@ -22,7 +22,7 @@
     "food:plan": "node scripts/food-network-plan.mjs",
     "test:facebook": "node tests/facebook.test.mjs",
     "test:engagement": "node tests/facebook-engagement.test.mjs",
-    "test:extension": "node --check src/chrome-extension-bridge-core.js && node --check src/chrome-extension-bridge.js && node --check chrome-extension/background.js && node --check chrome-extension/bridge-client.js && node --check chrome-extension/operator-runner.js && node --check chrome-extension/chatgpt-runner.js && node --check chrome-extension/content-chatgpt.js && node --check chrome-extension/content-facebook.js && node --check chrome-extension/popup.js && node tests/chrome-extension-bridge.test.mjs && node -e \"const m=require('./chrome-extension/manifest.json');if(m.manifest_version!==3||m.version!=='2.1.1')throw new Error('Invalid extension manifest')\"",
+    "test:extension": "node --check src/chrome-extension-bridge-core.js && node --check src/chrome-extension-bridge.js && node --check chrome-extension/background.js && node --check chrome-extension/bridge-client.js && node --check chrome-extension/operator-runner.js && node --check chrome-extension/chatgpt-runner.js && node --check chrome-extension/content-chatgpt.js && node --check chrome-extension/content-facebook.js && node --check chrome-extension/popup.js && node tests/chrome-extension-bridge.test.mjs && node -e \"const m=require('./chrome-extension/manifest.json');if(m.manifest_version!==3||m.version!=='2.1.2')throw new Error('Invalid extension manifest')\"",
     "test:operator": "node tests/facebook-operator-core.test.mjs && npm run test:extension",
     "test:group-monitor": "node tests/group-monitor-core.test.mjs",
     "test:meta": "node tests/meta-oauth.test.mjs",
