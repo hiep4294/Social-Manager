@@ -3,7 +3,8 @@ import { fileURLToPath } from 'node:url';
 import {
   getWindowsFoodAgentAutostartStatus,
   installWindowsFoodAgentAutostart,
-  removeWindowsFoodAgentAutostart
+  removeWindowsFoodAgentAutostart,
+  startWindowsFoodAgent
 } from '../src/windows-food-agent-autostart.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -28,7 +29,12 @@ if (action === 'install') {
   const result = getWindowsFoodAgentAutostartStatus();
   console.log(result.installed ? 'FOOD_AUTO_START_ON' : 'FOOD_AUTO_START_OFF');
   if (result.mode) console.log(`MODE: ${result.mode}`);
+} else if (action === 'start') {
+  const result = startWindowsFoodAgent({ root, nodePath:process.execPath });
+  console.log('FOOD_AGENT_START_OK');
+  console.log(`MODE: ${result.mode}`);
+  console.log(`LOG: ${result.log_path}`);
 } else {
-  console.error('Cách dùng: node scripts/manage-food-local-agent-autostart.mjs install|status|remove');
+  console.error('Cách dùng: node scripts/manage-food-local-agent-autostart.mjs install|start|status|remove');
   process.exit(2);
 }
