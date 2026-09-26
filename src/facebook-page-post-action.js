@@ -8,8 +8,14 @@ async function clickFirst(page, selectors, timeout = 3000) {
   for (const selector of selectors) {
     try {
       const locator = typeof selector === 'string' ? page.locator(selector) : selector(page);
-      if (await locator.first().isVisible({ timeout })) {
-        await locator.first().click({ timeout });
+      const count = Math.min(30, await locator.count().catch(() => 0));
+      for (let i = 0; i < count; i += 1) {
+        const candidate = locator.nth(i);
+        const visible = await candidate.isVisible({ timeout: Math.min(timeout, 700) }).catch(() => false);
+        if (!visible) continue;
+        const enabled = await candidate.isEnabled().catch(() => true);
+        if (!enabled) continue;
+        await candidate.click({ timeout });
         return true;
       }
     } catch {}
@@ -106,13 +112,44 @@ export async function executePostPage(page, payload, db) {
     await sleep(350);
   }
 
-  const opened = await clickFirst(page, [
-    p => p.getByRole('button', { name: /^bạn đang nghĩ gì\?$|^what.?s on your mind\??$/i }),
-    '[role="button"]:has-text("Bạn đang nghĩ gì?")',
-    '[role="button"]:has-text("Chia sẻ suy nghĩ")',
-    '[role="button"]:has-text("Tạo bài viết")'
-  ], 4500);
-  if (!opened) throw Object.assign(new Error('Không mở được hộp tạo bài trên Page'), { code: 'NEEDS_REVIEW' });
+  // Facebook changes the exact composer label frequently and may render
+  // hidden duplicate controls before the visible one.
+  let opened = await clickFirst(page, [
+    p => p.getByRole('button', {
+      name: /bạn đang nghĩ gì|chia sẻ suy nghĩ|tạo bài viết|viết bài|bạn muốn chia sẻ gì|create post|create a post|write a post|what.?s on your mind/i
+    }),
+    p => p.locator('button,[role="button"],[tabindex="0"]').filter({
+      hasText: /bạn đang nghĩ gì|chia sẻ suy nghĩ|tạo bài viết|viết bài|bạn muốn chia sẻ gì|create post|create a post|write a post|what.?s on your mind/i
+    }),
+    '[aria-label*="Tạo bài viết" i]',
+    '[aria-label*="Viết bài" i]',
+    '[aria-label*="Create post" i]',
+    '[aria-label*="Write a post" i]'
+  ], 3500);
+
+  if (!opened) {
+    const controls = page.locator('button,[role="button"],[tabindex="0"]');
+    const count = Math.min(120, await controls.count().catch(() => 0));
+
+    for (let i = 0; i < count && !opened; i += 1) {
+      const control = controls.nth(i);
+      if (!(await control.isVisible({ timeout: 200 }).catch(() => false))) continue;
+
+      const text = String(await control.innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+      const aria = String(await control.getAttribute('aria-label').catch(() => '')).replace(/\s+/g, ' ').trim();
+      const label = (text + ' ' + aria).trim();
+
+      if (!/bạn đang nghĩ gì|chia sẻ suy nghĩ|tạo bài viết|viết bài|bạn muốn chia sẻ gì|create post|create a post|write a post|what.?s on your mind/i.test(label)) continue;
+      if (!(await control.isEnabled().catch(() => true))) continue;
+
+      await control.click({ timeout: 3000 });
+      opened = true;
+    }
+  }
+
+  if (!opened) {
+    throw Object.assign(new Error('Không mở được hộp tạo bài trên Page'), { code: 'NEEDS_REVIEW' });
+  }
 
   await sleep(1800);
 
@@ -205,50 +242,60 @@ export async function executePostPage(page, payload, db) {
         throw Object.assign(new Error('Nút Tiếp chưa khả dụng sau khi nhập nội dung'), { code: 'NEEDS_REVIEW' });
       }
       await next.click({ timeout: 4000 });
-      await sleep(2200);
     }
 
-    const finalDialogs = page.locator('[role="dialog"]');
-    const finalDialogCount = Math.min(12, await finalDialogs.count().catch(() => 0));
-
+    // Photo posts can take several seconds to finish media processing after
+    // Next. Poll for the real enabled Post button instead of assuming a fixed
+    // 2.2 second transition.
     let finalDialog = null;
     let postButton = null;
 
-    for (let i = 0; i < finalDialogCount && !postButton; i += 1) {
-      const candidateDialog = finalDialogs.nth(i);
-      if (!(await candidateDialog.isVisible({ timeout: 500 }).catch(() => false))) continue;
+    for (let attempt = 0; attempt < 20 && !postButton; attempt += 1) {
+      const finalDialogs = page.locator('[role="dialog"]');
+      const finalDialogCount = Math.min(15, await finalDialogs.count().catch(() => 0));
 
-      const buttons = candidateDialog.getByRole('button', { name: /^(Đăng|Post)$/i });
-      const buttonCount = Math.min(10, await buttons.count().catch(() => 0));
+      for (let i = 0; i < finalDialogCount && !postButton; i += 1) {
+        const candidateDialog = finalDialogs.nth(i);
+        if (!(await candidateDialog.isVisible({ timeout: 250 }).catch(() => false))) continue;
 
-      for (let j = 0; j < buttonCount; j += 1) {
-        const candidate = buttons.nth(j);
-        const visible = await candidate.isVisible({ timeout: 400 }).catch(() => false);
-        const enabled = await candidate.isEnabled().catch(() => false);
-        if (visible && enabled) {
-          finalDialog = candidateDialog;
-          postButton = candidate;
-          break;
+        const buttons = candidateDialog.getByRole('button', { name: /^(Đăng|Post)$/i });
+        const buttonCount = Math.min(12, await buttons.count().catch(() => 0));
+
+        for (let j = 0; j < buttonCount; j += 1) {
+          const candidate = buttons.nth(j);
+          const visible = await candidate.isVisible({ timeout: 250 }).catch(() => false);
+          const enabled = await candidate.isEnabled().catch(() => false);
+          if (visible && enabled) {
+            finalDialog = candidateDialog;
+            postButton = candidate;
+            break;
+          }
         }
       }
+
+      if (!postButton) {
+        const buttons = page.getByRole('button', { name: /^(Đăng|Post)$/i });
+        const buttonCount = Math.min(30, await buttons.count().catch(() => 0));
+
+        for (let i = 0; i < buttonCount; i += 1) {
+          const candidate = buttons.nth(i);
+          const visible = await candidate.isVisible({ timeout: 250 }).catch(() => false);
+          const enabled = await candidate.isEnabled().catch(() => false);
+          if (visible && enabled) {
+            postButton = candidate;
+            break;
+          }
+        }
+      }
+
+      if (!postButton) await sleep(500);
     }
 
     if (!postButton) {
-      const buttons = page.getByRole('button', { name: /^(Đăng|Post)$/i });
-      const buttonCount = Math.min(20, await buttons.count().catch(() => 0));
-      for (let i = 0; i < buttonCount; i += 1) {
-        const candidate = buttons.nth(i);
-        const visible = await candidate.isVisible({ timeout: 400 }).catch(() => false);
-        const enabled = await candidate.isEnabled().catch(() => false);
-        if (visible && enabled) {
-          postButton = candidate;
-          break;
-        }
-      }
-    }
-
-    if (!postButton) {
-      throw Object.assign(new Error('Không tìm thấy nút Đăng khả dụng của Page'), { code: 'NEEDS_REVIEW' });
+      throw Object.assign(
+        new Error('Không tìm thấy nút Đăng khả dụng của Page sau khi chờ media xử lý'),
+        { code: 'NEEDS_REVIEW' }
+      );
     }
 
     if (payload.dry_run === true) {
