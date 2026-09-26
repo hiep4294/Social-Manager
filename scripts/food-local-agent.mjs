@@ -41,6 +41,7 @@ const FAILED_ROOT = path.join(SYSTEM_ROOT, 'failed');
 const TEMP_ROOT = path.join(SYSTEM_ROOT, 'temp');
 const STATE_ROOT = path.join(SYSTEM_ROOT, 'state');
 const LOGO_ROOT = path.join(SYSTEM_ROOT, 'logos');
+const CHATGPT_POSTER_LAYOUT = 'chatgpt-food-poster-v3';
 
 for (const dir of [IMAGE_ROOT, SYSTEM_ROOT, JOB_ROOT, LOG_ROOT, FAILED_ROOT, TEMP_ROOT, STATE_ROOT, LOGO_ROOT]) {
   fs.mkdirSync(dir, { recursive:true });
@@ -373,6 +374,7 @@ async function importDownloadedImage(downloadPath, recipe) {
     bytes:bytes.length,
     width:info.width,
     height:info.height,
+    layout:CHATGPT_POSTER_LAYOUT,
     imported_at:nowIso()
   };
   meta.final = meta.final || {};
@@ -481,7 +483,7 @@ async function composeFinal(page, recipe) {
     bytes:fs.statSync(finalPath).size,
     width:finalMeta.width,
     height:finalMeta.height,
-    layout:'chatgpt-food-poster-v3',
+    layout:CHATGPT_POSTER_LAYOUT,
     source:'chatgpt_generated_complete_poster',
     text:{
       page_title:String(page.page_name || ''),
@@ -549,9 +551,19 @@ function markStateUsed(page, state, recipe, postRef) {
 
 async function processImageStage(page, recipe, job) {
   const p = mealPaths(recipe);
-  if (fs.existsSync(p.source)) {
+  const sourceMeta = safeJsonRead(p.meta, {}) || {};
+  const sourceIsCurrentPoster =
+    fs.existsSync(p.source) &&
+    sourceMeta?.source?.layout === CHATGPT_POSTER_LAYOUT;
+
+  if (sourceIsCurrentPoster) {
     job.status = 'IMAGE_READY';
     return true;
+  }
+
+  if (fs.existsSync(p.source) && !sourceIsCurrentPoster) {
+    job.stale_source_detected = true;
+    job.stale_source_layout = sourceMeta?.source?.layout || 'legacy-unversioned';
   }
 
   if (!job.image_job_id) {
