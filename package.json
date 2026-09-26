@@ -38,7 +38,8 @@
     "food:auto:autostart:install": "node scripts/manage-food-local-agent-autostart.mjs install",
     "food:auto:autostart:status": "node scripts/manage-food-local-agent-autostart.mjs status",
     "food:auto:autostart:remove": "node scripts/manage-food-local-agent-autostart.mjs remove",
-    "food:post-now": "node scripts/food-post-now.mjs hom-nay-an-gi"
+    "food:post-now": "node scripts/food-post-now.mjs hom-nay-an-gi",
+    "food:auto:autostart:start": "node scripts/manage-food-local-agent-autostart.mjs start"
   },
   "dependencies": {
     "@modelcontextprotocol/node": "^2.0.0",
