@@ -1,0 +1,133 @@
+name: Build Windows Full Installer
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout stable
+        uses: actions/checkout@v4
+        with:
+          ref: stable
+          fetch-depth: 0
+
+      - name: Pin stable branch
+        shell: pwsh
+        run: git checkout -B stable origin/stable
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+
+      - name: Install dependencies
+        shell: pwsh
+        run: npm install --package-lock=false --no-audit --no-fund
+
+      - name: Run tests
+        shell: pwsh
+        run: npm test
+
+      - name: Bundle runtimes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference="Stop"
+          $rt=Join-Path $env:GITHUB_WORKSPACE "runtime"
+          New-Item -ItemType Directory -Force $rt|Out-Null
+
+          $z=Join-Path $env:RUNNER_TEMP "node.zip"
+          Invoke-WebRequest "https://nodejs.org/dist/v22.22.0/node-v22.22.0-win-x64.zip" -OutFile $z
+          $tmp=Join-Path $env:RUNNER_TEMP "node-rt"
+          Expand-Archive $z $tmp -Force
+          Move-Item (Join-Path $tmp "node-v22.22.0-win-x64") (Join-Path $rt "node")
+
+          $h=@{"User-Agent"="KODS-Social-Manager-Build"}
+          $rel=Invoke-RestMethod "https://api.github.com/repos/git-for-windows/git/releases/latest" -Headers $h
+          $a=$rel.assets|Where-Object{$_.name-match"^MinGit-.*-64-bit\.zip$"}|Select-Object -First 1
+          if(-not$a){throw "No MinGit"}
+          $z=Join-Path $env:RUNNER_TEMP "git.zip"
+          Invoke-WebRequest $a.browser_download_url -OutFile $z -Headers $h
+          Expand-Archive $z (Join-Path $rt "git") -Force
+
+          $meta=Invoke-RestMethod "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json"
+          $a=$meta.channels.Stable.downloads.chrome|Where-Object{$_.platform-eq"win64"}|Select-Object -First 1
+          if(-not$a){throw "No Chrome"}
+          $z=Join-Path $env:RUNNER_TEMP "chrome.zip"
+          Invoke-WebRequest $a.url -OutFile $z
+          $tmp=Join-Path $env:RUNNER_TEMP "chrome-rt"
+          Expand-Archive $z $tmp -Force
+          Move-Item (Join-Path $tmp "chrome-win64") (Join-Path $rt "chrome")
+
+          & (Join-Path $rt "node\node.exe") --version
+          & (Join-Path $rt "git\cmd\git.exe") --version
+
+      - name: Build stage
+        id: meta
+        shell: pwsh
+        run: |
+          $v=[string](Get-Content package.json -Raw|ConvertFrom-Json).version
+          $s=Join-Path $env:GITHUB_WORKSPACE "dist\SocialManager-Full-v$v"
+          powershell -NoProfile -ExecutionPolicy Bypass -File "installer\windows\build-stage.ps1" -Root $env:GITHUB_WORKSPACE -StageDir $s -Version $v
+          "version=$v">>$env:GITHUB_OUTPUT
+          "stage=$s">>$env:GITHUB_OUTPUT
+
+      - name: Build ZIP
+        shell: pwsh
+        run: |
+          $v="\${{ steps.meta.outputs.version }}"
+          $s="\${{ steps.meta.outputs.stage }}"
+          Compress-Archive -Path (Join-Path $s "*") -DestinationPath (Join-Path $env:GITHUB_WORKSPACE "dist\SocialManager-Full-v$v.zip") -CompressionLevel Optimal -Force
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build EXE
+        shell: pwsh
+        run: |
+          $v="\${{ steps.meta.outputs.version }}"
+          $s="\${{ steps.meta.outputs.stage }}"
+          $o=Join-Path $env:GITHUB_WORKSPACE "dist"
+          $iscc=Join-Path ([Environment]::GetFolderPath("ProgramFilesX86")) "Inno Setup 6\ISCC.exe"
+          if(-not(Test-Path $iscc)){throw "No ISCC"}
+          & $iscc "/DStageDir=$s" "/DAppVersion=$v" "/O$o" "installer\windows\SocialManager.iss"
+          if($LASTEXITCODE-ne 0){throw "ISCC failed"}
+
+      - name: SHA256
+        shell: pwsh
+        run: |
+          $v="\${{ steps.meta.outputs.version }}"
+          $d=Join-Path $env:GITHUB_WORKSPACE "dist"
+          $lines=foreach($x in @((Join-Path $d "SocialManager-Setup-v$v.exe"),(Join-Path $d "SocialManager-Full-v$v.zip"))){
+            $h=Get-FileHash $x -Algorithm SHA256
+            "$($h.Hash.ToLower())  $([IO.Path]::GetFileName($x))"
+          }
+          $lines|Set-Content (Join-Path $d "SHA256SUMS.txt") -Encoding ascii
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SocialManager-Windows-Full-v\${{ steps.meta.outputs.version }}
+          path: |
+            dist/SocialManager-Setup-v\${{ steps.meta.outputs.version }}.exe
+            dist/SocialManager-Full-v\${{ steps.meta.outputs.version }}.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: \${{ github.token }}
+        run: |
+          $v="\${{ steps.meta.outputs.version }}"
+          $short=(git rev-parse --short=7 HEAD).Trim()
+          $tag="windows-v$v-$short"
+          gh release create $tag --target stable --title "KODS Social Manager Windows v$v ($short)" --notes "Full Windows package: EXE + ZIP. Bundled Node.js, MinGit, Chrome for Testing and node_modules. No user secrets, DB or Facebook cookies included."
+          gh release upload $tag "dist/SocialManager-Setup-v$v.exe" "dist/SocialManager-Full-v$v.zip" "dist/SHA256SUMS.txt"
