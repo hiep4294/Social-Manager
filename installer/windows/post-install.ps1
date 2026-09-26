@@ -79,7 +79,11 @@ try{
 }finally{Pop-Location}
 
 try{schtasks.exe /Run /TN "SocialManagerFacebookOperatorAgent"|Out-Null}catch{}
-try{schtasks.exe /Run /TN "SocialManagerFoodLocalAgent"|Out-Null}catch{}
+Push-Location $root
+try{
+  & $node "scripts\manage-food-local-agent-autostart.mjs" start
+  if($LASTEXITCODE-ne 0){throw "Food Local Agent start loi"}
+}finally{Pop-Location}
 
 $desktop=[Environment]::GetFolderPath("Desktop")
 $programs=[Environment]::GetFolderPath("Programs")
