@@ -29,9 +29,16 @@ for (const page of pages) {
   assert.ok(!used.includes(recipe.id), 'trong cùng ngày 24 Page không dùng cùng món');
   used.push(recipe.id);
   const post = buildRecipePost({ page, recipe });
+  assert.match(post.content, /CÔNG THỨC CHI TIẾT/);
   assert.match(post.content, /NGUYÊN LIỆU/);
-  assert.match(post.content, /CÁCH LÀM/);
-  assert.match(post.content, /MẸO NHỎ/);
+  assert.match(post.content, /SƠ CHẾ & CHUẨN BỊ/);
+  assert.match(post.content, /CÁCH LÀM CHI TIẾT/);
+  assert.match(post.content, /DẤU HIỆU MÓN ĐẠT/);
+  assert.match(post.content, /MẸO QUAN TRỌNG/);
+  assert.match(post.content, /LỖI THƯỜNG GẶP & CÁCH TRÁNH/);
+  assert.match(post.content, /CÁCH DÙNG & BẢO QUẢN/);
+  assert.ok(post.content.length >= 1200, 'công thức phải đủ chi tiết, không được quá ngắn');
+  assert.equal(post.recipeDetail?.format_version, 'detailed-v2');
   assert.match(post.imagePrompt, /không chữ/);
 }
 
