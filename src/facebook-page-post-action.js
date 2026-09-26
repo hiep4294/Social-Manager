@@ -852,6 +852,13 @@ export async function executePostPage(page, payload, db) {
       );
     }
 
+    const publishRequest = publishResponse.request();
+    const publishParams = new URLSearchParams(String(publishRequest.postData() || ''));
+    const publishVariablesRaw = String(publishParams.get('variables') || '');
+    const publishRequestHasMedia =
+      /"attachments"\s*:\s*\[[\s\S]*?"photo"\s*:\s*\{/i.test(publishVariablesRaw) ||
+      /"photo_ids"\s*:\s*\[[^\]]+\]/i.test(publishVariablesRaw);
+
     let publishPayload = null;
     let publishErrors = [];
     try {
@@ -860,6 +867,43 @@ export async function executePostPage(page, payload, db) {
       publishPayload = JSON.parse(responseText);
       if (Array.isArray(publishPayload?.errors)) publishErrors = publishPayload.errors;
     } catch {}
+
+    const publishDiagnosticFile = path.resolve(
+      process.cwd(),
+      'data',
+      'facebook-last-publish-response.json'
+    );
+
+    try {
+      fs.mkdirSync(path.dirname(publishDiagnosticFile), { recursive: true });
+      fs.writeFileSync(
+        publishDiagnosticFile,
+        JSON.stringify({
+          captured_at: new Date().toISOString(),
+          page_url: target.url,
+          dedupe_marker: String(payload.dedupe_marker || ''),
+          requested_image: Boolean(payload.image_url),
+          request: {
+            friendly_name: String(publishParams.get('fb_api_req_friendly_name') || ''),
+            doc_id: String(publishParams.get('doc_id') || ''),
+            variables_length: publishVariablesRaw.length,
+            has_media_reference: publishRequestHasMedia
+          },
+          response_http_ok: publishResponse.ok(),
+          response_payload: publishPayload
+        }, null, 2),
+        'utf8'
+      );
+    } catch {}
+
+    if (payload.image_url && !publishRequestHasMedia) {
+      throw Object.assign(
+        new Error(
+          'ComposerStoryCreateMutation không chứa attachments/photo cho bài yêu cầu ảnh; không xác nhận thành công'
+        ),
+        { code: 'NEEDS_REVIEW' }
+      );
+    }
 
     if (!publishResponse.ok() || publishErrors.length > 0) {
       const detail = publishErrors
@@ -993,8 +1037,8 @@ export async function executePostPage(page, payload, db) {
       throw Object.assign(
         new Error(
           payload.image_url
-            ? 'ComposerStoryCreateMutation thành công nhưng chưa xác minh thấy bài kèm ảnh trên timeline; không tự retry để tránh đăng trùng'
-            : 'ComposerStoryCreateMutation thành công nhưng chưa xác minh thấy bài trên timeline; không tự retry để tránh đăng trùng'
+            ? 'ComposerStoryCreateMutation thành công và request có media nhưng chưa xác minh thấy bài kèm ảnh trên timeline; không tự retry để tránh đăng trùng; diagnostic=' + publishDiagnosticFile
+            : 'ComposerStoryCreateMutation thành công nhưng chưa xác minh thấy bài trên timeline; không tự retry để tránh đăng trùng; diagnostic=' + publishDiagnosticFile
         ),
         { code: 'NEEDS_REVIEW' }
       );
@@ -1004,6 +1048,9 @@ export async function executePostPage(page, payload, db) {
       ok: true,
       verified: true,
       publish_mutation: 'ComposerStoryCreateMutation',
+      mutation_has_media_reference: Boolean(publishRequestHasMedia),
+      publish_diagnostic: publishDiagnosticFile,
+      media_verified: Boolean(payload.image_url ? true : false),
       post_url: verifiedUrl || null,
       page_name: target.name || payload.page_name || '',
       page_url: target.url,
