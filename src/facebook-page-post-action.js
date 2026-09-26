@@ -225,7 +225,60 @@ export async function executePostPage(page, payload, db) {
       if (!(await input.count())) input = page.locator('input[type="file"][accept*="image" i]').last();
       if (!(await input.count())) input = page.locator('input[type="file"]').last();
       await input.setInputFiles(tempImage, { timeout: 7000 });
-      await sleep(2200);
+
+      // Do not move to Next until Facebook has actually accepted the media
+      // into the composer. A local file preview can exist before the upload
+      // is ready, which can result in a text-only post.
+      let mediaReady = false;
+
+      for (let attempt = 0; attempt < 30 && !mediaReady; attempt += 1) {
+        const attachmentSignals = dialog.locator(
+          '[aria-label*="Chỉnh sửa file phương tiện" i],' +
+          '[aria-label*="Gỡ file đính kèm" i],' +
+          '[aria-label*="Edit media" i],' +
+          '[aria-label*="Remove attachment" i]'
+        );
+
+        const signalCount = Math.min(12, await attachmentSignals.count().catch(() => 0));
+        let attachmentVisible = false;
+
+        for (let i = 0; i < signalCount; i += 1) {
+          if (await attachmentSignals.nth(i).isVisible({ timeout: 150 }).catch(() => false)) {
+            attachmentVisible = true;
+            break;
+          }
+        }
+
+        const progress = dialog.locator('[role="progressbar"],[aria-busy="true"]');
+        const progressCount = Math.min(12, await progress.count().catch(() => 0));
+        let progressVisible = false;
+
+        for (let i = 0; i < progressCount; i += 1) {
+          if (await progress.nth(i).isVisible({ timeout: 100 }).catch(() => false)) {
+            progressVisible = true;
+            break;
+          }
+        }
+
+        const selectedFileCount = await input.evaluate(el => Number(el?.files?.length || 0)).catch(() => 0);
+
+        if (selectedFileCount > 0 && attachmentVisible && !progressVisible) {
+          mediaReady = true;
+          break;
+        }
+
+        await sleep(500);
+      }
+
+      if (!mediaReady) {
+        throw Object.assign(
+          new Error('Ảnh chưa sẵn sàng trong composer sau khi tải lên; dừng trước khi Đăng để tránh tạo bài chỉ có chữ'),
+          { code: 'NEEDS_REVIEW' }
+        );
+      }
+
+      // Small settle window after Facebook marks the attachment ready.
+      await sleep(1800);
     }
 
     // Current Facebook Page composer is commonly two-step: content -> Tiếp -> Đăng.
@@ -443,6 +496,64 @@ export async function executePostPage(page, payload, db) {
             .replace(/\s+/g, ' ');
           if (!marker || !text.includes(marker)) continue;
 
+          let mediaVerified = !payload.image_url;
+
+          if (payload.image_url) {
+            const images = article.locator('img');
+            const imageCount = Math.min(30, await images.count().catch(() => 0));
+
+            for (let j = 0; j < imageCount && !mediaVerified; j += 1) {
+              const dims = await images.nth(j).evaluate(img => {
+                const rect = img.getBoundingClientRect();
+                return {
+                  naturalWidth: Number(img.naturalWidth || 0),
+                  naturalHeight: Number(img.naturalHeight || 0),
+                  width: Number(rect.width || 0),
+                  height: Number(rect.height || 0)
+                };
+              }).catch(() => null);
+
+              if (!dims) continue;
+              if (
+                (dims.naturalWidth >= 300 && dims.naturalHeight >= 180) ||
+                (dims.width >= 300 && dims.height >= 180)
+              ) {
+                mediaVerified = true;
+              }
+            }
+
+            if (!mediaVerified) {
+              const roleImages = article.locator('[role="img"]');
+              const roleCount = Math.min(30, await roleImages.count().catch(() => 0));
+
+              for (let j = 0; j < roleCount && !mediaVerified; j += 1) {
+                const dims = await roleImages.nth(j).evaluate(el => {
+                  const rect = el.getBoundingClientRect();
+                  return {
+                    width: Number(rect.width || 0),
+                    height: Number(rect.height || 0)
+                  };
+                }).catch(() => null);
+
+                if (dims && dims.width >= 300 && dims.height >= 180) {
+                  mediaVerified = true;
+                }
+              }
+            }
+
+            if (!mediaVerified) {
+              const mediaLinks = article.locator(
+                'a[href*="/photo/"],' +
+                'a[href*="/photos/"],' +
+                'a[href*="photo.php?fbid="],' +
+                'a[href*="media/set"]'
+              );
+              mediaVerified = (await mediaLinks.count().catch(() => 0)) > 0;
+            }
+          }
+
+          if (!mediaVerified) continue;
+
           verified = true;
 
           const links = article.locator(
@@ -463,7 +574,9 @@ export async function executePostPage(page, payload, db) {
 
         const body = String(await page.locator('body').innerText().catch(() => ''))
           .replace(/\s+/g, ' ');
-        if (marker && body.includes(marker)) {
+
+        // Text-only fallback is valid only when no media was requested.
+        if (!payload.image_url && marker && body.includes(marker)) {
           verified = true;
           break;
         }
@@ -472,7 +585,11 @@ export async function executePostPage(page, payload, db) {
 
     if (!verified) {
       throw Object.assign(
-        new Error('ComposerStoryCreateMutation thành công nhưng chưa xác minh thấy bài trên timeline; không tự retry để tránh đăng trùng'),
+        new Error(
+          payload.image_url
+            ? 'ComposerStoryCreateMutation thành công nhưng chưa xác minh thấy bài kèm ảnh trên timeline; không tự retry để tránh đăng trùng'
+            : 'ComposerStoryCreateMutation thành công nhưng chưa xác minh thấy bài trên timeline; không tự retry để tránh đăng trùng'
+        ),
         { code: 'NEEDS_REVIEW' }
       );
     }
