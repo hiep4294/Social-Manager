@@ -122,20 +122,203 @@ export function pickRecipeForPage({ pageSlot, date, usedRecipeIds = [] }) {
   return recipes[(day + pageSlot) % recipes.length];
 }
 
+const RECIPE_CATEGORY_GUIDE = {
+  gia_dinh: {
+    serving:'3-4 người',
+    finish:'Món đạt khi nguyên liệu chín mềm hoặc chín tới đúng đặc trưng, gia vị bám đều và mùi thơm rõ nhưng không bị khô.',
+    mistake:'Tránh nêm quá đậm ngay từ đầu. Nên nêm khoảng 70-80% trước, sau đó chỉnh lại ở cuối khi nước/sốt đã cô bớt.'
+  },
+  mon_nuoc: {
+    serving:'3-4 người',
+    finish:'Nước dùng có vị cân bằng, không bị gắt mặn/chua/ngọt; phần cái vừa chín, không nát và mùi rau thơm còn rõ.',
+    mistake:'Không đun sôi quá mạnh trong thời gian dài nếu muốn nước dùng trong. Rau thơm và nguyên liệu nhanh chín nên cho gần cuối.'
+  },
+  mon_soi: {
+    serving:'2-3 người',
+    finish:'Sợi chín vừa, tơi, không bở; phần thịt/rau còn độ ẩm và gia vị phủ đều quanh sợi.',
+    mistake:'Không trụng sợi quá mềm vì còn một bước xào/nấu tiếp. Nếu sợi dính, xả hoặc trộn một lớp dầu thật mỏng trước khi chế biến.'
+  },
+  chay: {
+    serving:'3-4 người',
+    finish:'Rau/nấm/đậu giữ được cấu trúc, thấm gia vị nhưng không nát; vị ngọt tự nhiên của nguyên liệu vẫn còn.',
+    mistake:'Nấm và rau nhiều nước nên dùng chảo nóng, không cho quá đầy chảo để tránh món bị hấp hơi và ra nhiều nước.'
+  },
+  hai_san: {
+    serving:'3-4 người',
+    finish:'Hải sản vừa chín, thịt săn nhưng còn mọng nước, không có mùi tanh gắt và không bị dai.',
+    mistake:'Hải sản rất dễ quá lửa. Chuẩn bị sẵn gia vị trước khi nấu và dừng nhiệt ngay khi vừa đạt độ chín.'
+  },
+  chien: {
+    serving:'3-4 người',
+    finish:'Bề mặt vàng, ráo và giòn; bên trong chín nhưng không khô. Nếu có sốt, sốt chỉ bám một lớp vừa đủ.',
+    mistake:'Nguyên liệu còn ướt sẽ làm bắn dầu và khó giòn. Không cho quá nhiều vào chảo cùng lúc vì nhiệt dầu tụt nhanh.'
+  },
+  an_vat: {
+    serving:'2-3 người',
+    finish:'Món có cấu trúc rõ: món giòn vẫn giòn, món trộn không bị nhũn và vị chua-ngọt-mặn hài hòa.',
+    mistake:'Các món trộn nên hoàn thiện sát giờ ăn. Thành phần giòn và đậu phộng/hành phi nên cho ở cuối.'
+  },
+  nuong: {
+    serving:'3-4 người',
+    finish:'Mặt ngoài vàng/xém thơm, phần trong chín đều và còn độ ẩm; sốt ướp không bị cháy đen.',
+    mistake:'Nên làm nóng thiết bị trước. Các sốt có đường hoặc mật ong dễ cháy, vì vậy quét dày ở giai đoạn cuối thay vì ngay từ đầu.'
+  },
+  banh: {
+    serving:'3-4 phần',
+    finish:'Bánh chín đều, giữ đúng kết cấu của món: phần cần giòn thì giòn, phần ruột cần mềm thì không bị khô.',
+    mistake:'Đong nguyên liệu theo đúng định lượng gốc và kiểm soát nhiệt ổn định; thay đổi lượng chất lỏng tùy tiện dễ làm sai kết cấu.'
+  },
+  trang_mieng: {
+    serving:'4 phần',
+    finish:'Độ ngọt vừa, kết cấu mịn hoặc mềm đúng đặc trưng và không có mùi trứng/bột sống.',
+    mistake:'Không tăng nhiệt chỉ để rút ngắn thời gian. Món ngọt thường dễ tách nước, rỗ mặt hoặc cháy đáy khi nhiệt quá cao.'
+  },
+  do_uong: {
+    serving:'2-3 ly',
+    finish:'Mùi nguyên liệu chính rõ, vị ngọt/chua cân bằng và đồ uống không bị đắng hoặc nhạt do quá nhiều đá.',
+    mistake:'Các thành phần có vị chua hoặc hương tươi nên cho khi nền nước đã nguội bớt; nếm lại sau khi thêm đá.'
+  },
+  rau_cu: {
+    serving:'3-4 người',
+    finish:'Rau củ giữ màu, còn độ giòn hoặc mềm vừa theo món, không ra quá nhiều nước.',
+    mistake:'Rau sau khi rửa cần để ráo. Không trộn/xào quá lâu vì rau dễ mất độ giòn và tiết nước.'
+  }
+};
+
+function techniqueNote(step = '') {
+  const text = String(step).toLowerCase();
+
+  if (/ướp/u.test(text)) {
+    return 'Trộn kỹ để gia vị phủ đều các mặt. Trong thời gian ướp nên để nguyên liệu nghỉ yên; nếu ướp lâu, bảo quản trong ngăn mát.';
+  }
+  if (/chiên|rán/u.test(text)) {
+    return 'Làm nóng dầu/chảo trước khi cho nguyên liệu vào. Chia thành từng mẻ nếu cần để nhiệt không tụt và bề mặt lên màu đều.';
+  }
+  if (/áp chảo/u.test(text)) {
+    return 'Bề mặt nguyên liệu nên ráo. Đặt vào chảo đã nóng và hạn chế đảo liên tục để tạo màu xém thơm.';
+  }
+  if (/xào/u.test(text)) {
+    return 'Chuẩn bị sẵn toàn bộ nguyên liệu trước khi bật bếp. Với bước xào nhanh, dùng chảo nóng và đảo gọn tay để nguyên liệu không ra nhiều nước.';
+  }
+  if (/kho|rim/u.test(text)) {
+    return 'Sau khi hỗn hợp sôi, hạ nhiệt để món thấm từ từ. Quan sát lượng nước/sốt và chỉ đảo nhẹ để nguyên liệu không vỡ.';
+  }
+  if (/hấp/u.test(text)) {
+    return 'Nên đợi nước trong nồi hấp sôi ổn định rồi mới đặt món vào. Hạn chế mở nắp nhiều lần vì nhiệt và hơi nước sẽ thất thoát.';
+  }
+  if (/nướng/u.test(text)) {
+    return 'Làm nóng lò/nồi chiên trước khi nướng. Theo dõi màu bề mặt ở giai đoạn cuối vì sốt có đường, mật ong hoặc dầu hào dễ sậm màu nhanh.';
+  }
+  if (/luộc|chần/u.test(text)) {
+    return 'Dùng lượng nước đủ ngập hoặc tiếp xúc đều với nguyên liệu. Sau khi đạt độ chín yêu cầu nên vớt ra đúng lúc để tránh chín quá.';
+  }
+  if (/nấu|hầm/u.test(text)) {
+    return 'Sau khi sôi, điều chỉnh lửa để món chỉ sôi vừa. Hớt bọt nếu có và nêm hoàn thiện ở cuối khi hương vị đã ổn định.';
+  }
+  if (/trộn/u.test(text)) {
+    return 'Trộn từ dưới lên và vừa đủ để sốt phủ đều. Không bóp hoặc đảo quá mạnh với nguyên liệu mềm, rau và bánh tráng.';
+  }
+  if (/xay/u.test(text)) {
+    return 'Xay theo từng nhịp ngắn, kiểm tra độ mịn giữa các lần để tránh làm hỗn hợp nóng lên hoặc loãng quá mức.';
+  }
+  if (/ngâm/u.test(text)) {
+    return 'Dùng dụng cụ sạch và bảo đảm phần nước ngâm đã ở nhiệt độ phù hợp trước khi cho nguyên liệu vào.';
+  }
+
+  return 'Thực hiện đúng thứ tự và quan sát trạng thái thực tế của nguyên liệu; không chỉ phụ thuộc tuyệt đối vào thời gian vì kích thước miếng và công suất bếp có thể khác nhau.';
+}
+
+function buildDetailedStep(step, index) {
+  const base = String(step || '').trim().replace(/[.。]+$/u, '');
+  return `${index + 1}. ${base}.\n   → ${techniqueNote(base)}`;
+}
+
+function buildIngredientPrep(recipe) {
+  const lines = [];
+
+  for (const ingredient of recipe.ingredients || []) {
+    const raw = String(ingredient || '').trim();
+    if (!raw) continue;
+
+    let note = 'Chuẩn bị đúng định lượng, để riêng trước khi bắt đầu nấu.';
+    if (/thịt|gà|bò|sườn|cá|tôm|mực|xương/u.test(raw.toLowerCase())) {
+      note = 'Sơ chế sạch, để ráo trước khi ướp hoặc gặp dầu nóng.';
+    } else if (/rau|hành|gừng|sả|cà chua|dứa|cà rốt|nấm|ớt|xoài|chanh|tắc|lá/u.test(raw.toLowerCase())) {
+      note = 'Rửa/sơ chế sạch, để ráo và cắt theo kích thước phù hợp với món.';
+    } else if (/bún|mì|miến|bánh|gạo|cơm/u.test(raw.toLowerCase())) {
+      note = 'Chuẩn bị riêng, tránh làm quá mềm trước bước chế biến chính.';
+    }
+
+    lines.push(`- ${raw}: ${note}`);
+  }
+
+  return lines.join('\n');
+}
+
 export function buildRecipePost({ page, recipe }) {
   const introByVoice = {
     'ấm áp, gần gũi': `Hôm nay vào bếp với ${recipe.title} - món ngon dễ đưa cơm và hợp cho bữa nhà.`,
     'thực tế, dễ làm': `${recipe.title} là lựa chọn dễ triển khai với nguyên liệu quen thuộc.`,
-    'ngắn gọn, tiết kiệm thời gian': `Gợi ý hôm nay: ${recipe.title}. Làm theo các bước dưới đây để tiết kiệm thời gian.`,
+    'ngắn gọn, tiết kiệm thời gian': `Gợi ý hôm nay: ${recipe.title}. Mình vẫn ghi đủ định lượng và kỹ thuật quan trọng để bạn làm ổn ngay từ lần đầu.`,
     'thanh nhẹ, rõ ràng': `${recipe.title} - một món nhẹ nhàng, dễ chuẩn bị tại nhà.`
   };
-  const intro = introByVoice[page.voice] || `Món hôm nay: ${recipe.title}. Cùng làm từng bước để món ngon ổn định và dễ thành công.`;
+
+  const intro = introByVoice[page.voice] ||
+    `Món hôm nay: ${recipe.title}. Dưới đây là công thức chi tiết, đi từ chuẩn bị nguyên liệu đến cách nhận biết món đã đạt.`;
+
+  const guide = RECIPE_CATEGORY_GUIDE[recipe.category] || {
+    serving:'3-4 người',
+    finish:'Món chín đều, hương vị cân bằng và giữ được đặc trưng chính của nguyên liệu.',
+    mistake:'Nêm từng bước và quan sát trạng thái thực tế thay vì chỉ phụ thuộc vào thời gian.'
+  };
+
   const ingredients = recipe.ingredients.map(x => `- ${x}`).join('\n');
-  const steps = recipe.steps.map((x, i) => `${i + 1}. ${x}`).join('\n');
+  const prep = buildIngredientPrep(recipe);
+  const steps = recipe.steps.map(buildDetailedStep).join('\n\n');
   const hashtags = ['#HuongDanNauAn','#BepNha','#CongThucNauAn'];
-  const content = `${intro}\n\nNGUYÊN LIỆU\n${ingredients}\n\nCÁCH LÀM\n${steps}\n\nMẸO NHỎ\n${recipe.tip}\n\n${hashtags.join(' ')}`;
+
+  const content = [
+    intro,
+    '',
+    'CÔNG THỨC CHI TIẾT',
+    `Khẩu phần tham khảo: ${guide.serving}`,
+    '',
+    'NGUYÊN LIỆU',
+    ingredients,
+    '',
+    'SƠ CHẾ & CHUẨN BỊ',
+    prep,
+    '',
+    'CÁCH LÀM CHI TIẾT',
+    steps,
+    '',
+    'DẤU HIỆU MÓN ĐẠT',
+    guide.finish,
+    '',
+    'MẸO QUAN TRỌNG',
+    recipe.tip,
+    '',
+    'LỖI THƯỜNG GẶP & CÁCH TRÁNH',
+    guide.mistake,
+    '',
+    'CÁCH DÙNG & BẢO QUẢN',
+    'Nên dùng món ở trạng thái phù hợp nhất ngay sau khi hoàn thiện. Nếu chưa dùng ngay, để món nguội bớt, cho vào hộp sạch có nắp và bảo quản lạnh; khi dùng lại cần kiểm tra mùi, trạng thái và hâm nóng phù hợp với loại món.',
+    '',
+    hashtags.join(' ')
+  ].join('\n');
+
   const imagePrompt = `Ảnh chụp món ăn ${recipe.title}, món ăn Việt Nam trình bày hấp dẫn trên bàn ăn gia đình, ánh sáng tự nhiên, food photography chân thực, góc chụp 45 độ, chi tiết món ăn rõ, không chữ, không logo, không người, khung vuông 1:1.`;
-  return { content, imagePrompt };
+
+  return {
+    content,
+    imagePrompt,
+    recipeDetail: {
+      serving:guide.serving,
+      ingredient_count:recipe.ingredients.length,
+      step_count:recipe.steps.length,
+      format_version:'detailed-v2'
+    }
+  };
 }
 
 export function localDateInVietnam(now = new Date()) {
