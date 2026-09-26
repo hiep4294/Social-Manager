@@ -221,17 +221,61 @@ export async function executePostPage(page, payload, db) {
       fs.mkdirSync(dataDir, { recursive: true });
       tempImage = await downloadImage(payload.image_url, dataDir);
 
-      let input = dialog.locator('input[type="file"][accept*="image" i]').last();
-      if (!(await input.count())) input = page.locator('input[type="file"][accept*="image" i]').last();
-      if (!(await input.count())) input = page.locator('input[type="file"]').last();
-      await input.setInputFiles(tempImage, { timeout: 7000 });
+      // Use the actual Photo/Video control and its filechooser event. Facebook
+      // keeps several hidden file inputs on the page; selecting an arbitrary
+      // input can show a temporary preview but submit a text-only story.
+      let mediaButton = dialog.getByRole('button', {
+        name: /^(Ảnh\/video|Photo\/video|Photo\/Video)$/i
+      }).last();
 
-      // Do not move to Next until Facebook has actually accepted the media
-      // into the composer. A local file preview can exist before the upload
-      // is ready, which can result in a text-only post.
+      if (!(await mediaButton.isVisible({ timeout: 1200 }).catch(() => false))) {
+        mediaButton = dialog.locator(
+          '[aria-label="Ảnh/video" i],' +
+          '[aria-label="Photo/video" i],' +
+          '[aria-label="Photo/Video" i]'
+        ).last();
+      }
+
+      if (!(await mediaButton.isVisible({ timeout: 1200 }).catch(() => false))) {
+        mediaButton = dialog.locator('button,[role="button"]').filter({
+          hasText: /Ảnh\/video|Photo\/video/i
+        }).last();
+      }
+
+      if (!(await mediaButton.isVisible({ timeout: 1500 }).catch(() => false))) {
+        throw Object.assign(
+          new Error('Không tìm thấy nút Ảnh/video trong composer của Page'),
+          { code: 'NEEDS_REVIEW' }
+        );
+      }
+
+      const chooserPromise = page.waitForEvent('filechooser', { timeout: 6000 }).catch(() => null);
+      await mediaButton.click({ timeout: 4000 });
+      const chooser = await chooserPromise;
+
+      if (chooser) {
+        await chooser.setFiles(tempImage);
+      } else {
+        // Conservative fallback only inside the active composer dialog.
+        let input = dialog.locator('input[type="file"][accept*="image" i]').last();
+        if (!(await input.count())) input = dialog.locator('input[type="file"]').last();
+
+        if (!(await input.count())) {
+          throw Object.assign(
+            new Error('Nút Ảnh/video không mở filechooser và composer không có input ảnh'),
+            { code: 'NEEDS_REVIEW' }
+          );
+        }
+
+        await input.setInputFiles(tempImage, { timeout: 7000 });
+      }
+
+      // Wait for a stable media preview in the composer, not merely a file
+      // selected on a hidden input. Require two consecutive stable checks.
       let mediaReady = false;
+      let stableChecks = 0;
 
-      for (let attempt = 0; attempt < 30 && !mediaReady; attempt += 1) {
+      for (let attempt = 0; attempt < 40 && !mediaReady; attempt += 1) {
         const attachmentSignals = dialog.locator(
           '[aria-label*="Chỉnh sửa file phương tiện" i],' +
           '[aria-label*="Gỡ file đính kèm" i],' +
@@ -243,8 +287,35 @@ export async function executePostPage(page, payload, db) {
         let attachmentVisible = false;
 
         for (let i = 0; i < signalCount; i += 1) {
-          if (await attachmentSignals.nth(i).isVisible({ timeout: 150 }).catch(() => false)) {
+          if (await attachmentSignals.nth(i).isVisible({ timeout: 120 }).catch(() => false)) {
             attachmentVisible = true;
+            break;
+          }
+        }
+
+        const previews = dialog.locator('img,[role="img"]');
+        const previewCount = Math.min(40, await previews.count().catch(() => 0));
+        let largePreviewVisible = false;
+
+        for (let i = 0; i < previewCount; i += 1) {
+          const dims = await previews.nth(i).evaluate(el => {
+            const rect = el.getBoundingClientRect();
+            const naturalWidth = 'naturalWidth' in el ? Number(el.naturalWidth || 0) : 0;
+            const naturalHeight = 'naturalHeight' in el ? Number(el.naturalHeight || 0) : 0;
+            return {
+              width: Number(rect.width || 0),
+              height: Number(rect.height || 0),
+              naturalWidth,
+              naturalHeight
+            };
+          }).catch(() => null);
+
+          if (!dims) continue;
+          if (
+            (dims.naturalWidth >= 300 && dims.naturalHeight >= 180) ||
+            (dims.width >= 300 && dims.height >= 180)
+          ) {
+            largePreviewVisible = true;
             break;
           }
         }
@@ -260,9 +331,13 @@ export async function executePostPage(page, payload, db) {
           }
         }
 
-        const selectedFileCount = await input.evaluate(el => Number(el?.files?.length || 0)).catch(() => 0);
+        if (attachmentVisible && largePreviewVisible && !progressVisible) {
+          stableChecks += 1;
+        } else {
+          stableChecks = 0;
+        }
 
-        if (selectedFileCount > 0 && attachmentVisible && !progressVisible) {
+        if (stableChecks >= 2) {
           mediaReady = true;
           break;
         }
@@ -272,13 +347,12 @@ export async function executePostPage(page, payload, db) {
 
       if (!mediaReady) {
         throw Object.assign(
-          new Error('Ảnh chưa sẵn sàng trong composer sau khi tải lên; dừng trước khi Đăng để tránh tạo bài chỉ có chữ'),
+          new Error('Ảnh chưa được xác nhận là attachment thật trong composer; dừng trước khi Đăng'),
           { code: 'NEEDS_REVIEW' }
         );
       }
 
-      // Small settle window after Facebook marks the attachment ready.
-      await sleep(1800);
+      await sleep(1500);
     }
 
     // Current Facebook Page composer is commonly two-step: content -> Tiếp -> Đăng.
