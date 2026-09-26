@@ -42,4 +42,22 @@ for (const page of pages) {
   assert.match(post.imagePrompt, /không chữ/);
 }
 
-console.log(`Food Network OK: ${pages.length} pages, ${recipes.length} recipes, 24 món không trùng trong ngày.`);
+for (const recipe of recipes) {
+  const post = buildRecipePost({
+    page:{ slot:6, name:'Món Ngon Dễ Làm', theme:'Công thức cơ bản', voice:'rõ bước, dễ theo' },
+    recipe
+  });
+
+  assert.ok(
+    post.content.length >= 1200,
+    `công thức ${recipe.title} quá ngắn: ${post.content.length} ký tự`
+  );
+  assert.match(post.content, /CÔNG THỨC CHI TIẾT/);
+  assert.match(post.content, /SƠ CHẾ & CHUẨN BỊ/);
+  assert.match(post.content, /CÁCH LÀM CHI TIẾT/);
+  assert.match(post.content, /DẤU HIỆU MÓN ĐẠT/);
+  assert.match(post.content, /LỖI THƯỜNG GẶP & CÁCH TRÁNH/);
+  assert.match(post.content, /CÁCH DÙNG & BẢO QUẢN/);
+}
+
+console.log(`Food Network OK: ${pages.length} pages, ${recipes.length} recipes, all recipes use detailed-v2 format.`);
