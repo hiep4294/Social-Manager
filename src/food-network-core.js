@@ -224,6 +224,12 @@ function techniqueNote(step = '') {
   if (/ngâm/u.test(text)) {
     return 'Dùng dụng cụ sạch và bảo đảm phần nước ngâm đã ở nhiệt độ phù hợp trước khi cho nguyên liệu vào.';
   }
+  if (/thắng đường|caramel|màu cánh gián/u.test(text)) {
+    return 'Dùng nồi/chảo khô, đun đường ở lửa vừa đến khi chuyển màu hổ phách hoặc cánh gián rồi hạ nhiệt. Không để đường chuyển nâu đen vì sẽ sinh vị đắng.';
+  }
+  if (/nêm lại|nêm vừa|nêm vị|nêm chua|nêm/u.test(text)) {
+    return 'Nếm ở giai đoạn cuối khi lượng nước/sốt đã gần ổn định. Chỉnh từng ít một để tránh quá mặn, quá ngọt hoặc quá chua.';
+  }
 
   return 'Thực hiện đúng thứ tự và quan sát trạng thái thực tế của nguyên liệu; không chỉ phụ thuộc tuyệt đối vào thời gian vì kích thước miếng và công suất bếp có thể khác nhau.';
 }
@@ -240,13 +246,22 @@ function buildIngredientPrep(recipe) {
     const raw = String(ingredient || '').trim();
     if (!raw) continue;
 
+    const text = raw.toLowerCase();
     let note = 'Chuẩn bị đúng định lượng, để riêng trước khi bắt đầu nấu.';
-    if (/thịt|gà|bò|sườn|cá|tôm|mực|xương/u.test(raw.toLowerCase())) {
-      note = 'Sơ chế sạch, để ráo trước khi ướp hoặc gặp dầu nóng.';
-    } else if (/rau|hành|gừng|sả|cà chua|dứa|cà rốt|nấm|ớt|xoài|chanh|tắc|lá/u.test(raw.toLowerCase())) {
-      note = 'Rửa/sơ chế sạch, để ráo và cắt theo kích thước phù hợp với món.';
-    } else if (/bún|mì|miến|bánh|gạo|cơm/u.test(raw.toLowerCase())) {
-      note = 'Chuẩn bị riêng, tránh làm quá mềm trước bước chế biến chính.';
+
+    // Order matters: "trứng gà" must be classified as egg, not poultry.
+    if (/trứng/u.test(text)) {
+      note = 'Kiểm tra vỏ nguyên, sạch; luộc hoặc đập trứng theo đúng bước công thức và để riêng khỏi thực phẩm đã chín.';
+    } else if (/thịt|thăn bò|ba chỉ|sườn|cánh gà|đùi gà|thịt gà|con gà|ức gà|xương heo|chân gà/u.test(text)) {
+      note = 'Sơ chế sạch, thấm hoặc để ráo trước khi ướp, áp chảo, chiên hay nướng để gia vị bám tốt và hạn chế bắn dầu.';
+    } else if (/cá|tôm|mực|hải sản|cua/u.test(text)) {
+      note = 'Làm sạch, loại bỏ phần không dùng, rửa nhanh khi cần rồi để thật ráo; hải sản nên được chế biến vừa chín để tránh khô hoặc dai.';
+    } else if (/rau|hành|gừng|sả|cà chua|dứa|cà rốt|nấm|ớt|xoài|chanh|tắc|lá|bông cải|giá|dưa leo|bắp cải|cần tây/u.test(text)) {
+      note = 'Rửa/sơ chế sạch, để ráo và cắt đồng đều theo kích thước phù hợp để chín đều.';
+    } else if (/bún|mì|miến|bánh|gạo|cơm/u.test(text)) {
+      note = 'Chuẩn bị riêng và chỉ làm mềm đến mức cần thiết vì nguyên liệu còn tiếp tục chín ở bước chế biến sau.';
+    } else if (/nước mắm|nước tương|dầu hào|đường|muối|tiêu|giấm|mật ong|dầu mè|nước cốt|sữa|bơ/u.test(text)) {
+      note = 'Đong sẵn đúng lượng ghi trong công thức; chưa đổ toàn bộ vào món cho đến đúng bước để còn khoảng điều chỉnh vị ở cuối.';
     }
 
     lines.push(`- ${raw}: ${note}`);
