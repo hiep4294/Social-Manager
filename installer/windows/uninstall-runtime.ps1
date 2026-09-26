@@ -7,8 +7,10 @@ Get-CimInstance Win32_Process|Where-Object{$_.Name-eq"node.exe"-and$_.CommandLin
 if(Test-Path $node){
   Push-Location $root
   & $node "scripts\manage-facebook-operator-autostart.mjs" remove|Out-Null
+  & $node "scripts\manage-food-local-agent-autostart.mjs" remove|Out-Null
   Pop-Location
 }else{
   schtasks.exe /Delete /TN "SocialManagerFacebookOperatorAgent" /F|Out-Null
+  schtasks.exe /Delete /TN "SocialManagerFoodLocalAgent" /F|Out-Null
 }
 Write-Host "Da dung dich vu. Script khong chu dong xoa data nguoi dung."
