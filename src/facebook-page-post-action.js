@@ -86,28 +86,117 @@ export async function executePostPage(page, payload, db) {
   await page.waitForTimeout(2200);
   await assertNoCheckpoint(page);
 
-  // Idempotency guard: if the beginning of the exact message is already visible
-  // on the recent Page timeline, treat the job as already completed.
+  // Idempotency guard. For media jobs, marker text alone is not enough:
+  // the existing post must also contain real media or a text-only partial
+  // publish could be mistaken for success on a retry.
   const dedupeMarker = String(payload.dedupe_marker || payload.message || '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 72);
+
   if (dedupeMarker) {
-    for (const y of [0, 650, 1300, 2100]) {
+    for (const y of [0, 650, 1300, 2100, 3200]) {
       await page.evaluate(v => window.scrollTo(0, v), y).catch(() => {});
       await sleep(550);
-      const body = String(await page.locator('body').innerText().catch(() => '')).replace(/\s+/g, ' ');
-      if (body.includes(dedupeMarker)) {
+
+      const articles = page.locator('[role="article"]');
+      const articleCount = Math.min(50, await articles.count().catch(() => 0));
+
+      for (let i = 0; i < articleCount; i += 1) {
+        const article = articles.nth(i);
+        const text = String(await article.innerText().catch(() => ''))
+          .replace(/\s+/g, ' ');
+
+        if (!text.includes(dedupeMarker)) continue;
+
+        let mediaVerified = !payload.image_url;
+
+        if (payload.image_url) {
+          const images = article.locator('img');
+          const imageCount = Math.min(30, await images.count().catch(() => 0));
+
+          for (let j = 0; j < imageCount && !mediaVerified; j += 1) {
+            const dims = await images.nth(j).evaluate(img => {
+              const rect = img.getBoundingClientRect();
+              return {
+                naturalWidth: Number(img.naturalWidth || 0),
+                naturalHeight: Number(img.naturalHeight || 0),
+                width: Number(rect.width || 0),
+                height: Number(rect.height || 0)
+              };
+            }).catch(() => null);
+
+            if (!dims) continue;
+
+            if (
+              (dims.naturalWidth >= 300 && dims.naturalHeight >= 180) ||
+              (dims.width >= 300 && dims.height >= 180)
+            ) {
+              mediaVerified = true;
+            }
+          }
+
+          if (!mediaVerified) {
+            const roleImages = article.locator('[role="img"]');
+            const roleCount = Math.min(30, await roleImages.count().catch(() => 0));
+
+            for (let j = 0; j < roleCount && !mediaVerified; j += 1) {
+              const dims = await roleImages.nth(j).evaluate(el => {
+                const rect = el.getBoundingClientRect();
+                return {
+                  width: Number(rect.width || 0),
+                  height: Number(rect.height || 0)
+                };
+              }).catch(() => null);
+
+              if (dims && dims.width >= 300 && dims.height >= 180) {
+                mediaVerified = true;
+              }
+            }
+          }
+
+          if (!mediaVerified) {
+            const mediaLinks = article.locator(
+              'a[href*="/photo/"],' +
+              'a[href*="/photos/"],' +
+              'a[href*="photo.php?fbid="],' +
+              'a[href*="media/set"]'
+            );
+
+            mediaVerified = (await mediaLinks.count().catch(() => 0)) > 0;
+          }
+        }
+
+        if (!mediaVerified) continue;
+
         return {
           ok: true,
           verified: true,
           already_present: true,
+          media_verified: Boolean(payload.image_url),
           page_name: target.name || payload.page_name || '',
           page_url: target.url,
           current_url: page.url()
         };
       }
+
+      if (!payload.image_url) {
+        const body = String(await page.locator('body').innerText().catch(() => ''))
+          .replace(/\s+/g, ' ');
+
+        if (body.includes(dedupeMarker)) {
+          return {
+            ok: true,
+            verified: true,
+            already_present: true,
+            page_name: target.name || payload.page_name || '',
+            page_url: target.url,
+            current_url: page.url()
+          };
+        }
+      }
     }
+
     await page.evaluate(() => window.scrollTo(0, 0)).catch(() => {});
     await sleep(350);
   }
