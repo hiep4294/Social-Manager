@@ -74,12 +74,17 @@ export function installWindowsAgentAutostart({ root, nodePath = process.execPath
   const paths = windowsAutostartPaths(root, nodePath);
   fs.mkdirSync(paths.dataDir, { recursive: true });
 
+  const bundledGitCmd = path.join(root, 'runtime', 'git', 'cmd');
+  const bundledNodeDir = path.dirname(paths.nodePath);
+  const runtimePathParts = [bundledGitCmd, bundledNodeDir].filter(item => fs.existsSync(item));
+
   const cmd = [
     '@echo off',
+    runtimePathParts.length ? `set "PATH=${runtimePathParts.join(';')};%PATH%"` : null,
     `cd /d "${root}"`,
     `"${paths.nodePath}" "${paths.watchdog}" >> "${paths.logPath}" 2>&1`,
     ''
-  ].join('\r\n');
+  ].filter(Boolean).join('\r\n');
 
   const vbs = [
     'Set shell = CreateObject("WScript.Shell")',
