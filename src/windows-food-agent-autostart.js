@@ -119,6 +119,44 @@ export function getWindowsFoodAgentAutostartStatus() {
   };
 }
 
+export function startWindowsFoodAgent({ root, nodePath = process.execPath } = {}) {
+  if (process.platform !== 'win32') return { ok:false, skipped:true, reason:'WINDOWS_ONLY' };
+  if (!root) throw new Error('Thiếu root để khởi động Food Local Agent');
+
+  const p = foodAgentAutostartPaths(root, nodePath);
+  const status = getWindowsFoodAgentAutostartStatus();
+
+  if (status.mode === 'TASK_SCHEDULER') {
+    const task = runExe('schtasks.exe', ['/Run','/TN',TASK_NAME], { allowFailure:true });
+    if (task.status === 0) {
+      return {
+        ok:true,
+        started:true,
+        mode:'TASK_SCHEDULER',
+        task_name:TASK_NAME,
+        log_path:p.logPath
+      };
+    }
+  }
+
+  if (!fs.existsSync(p.vbsPath)) {
+    throw new Error(`Thiếu file khởi động Food Local Agent: ${p.vbsPath}`);
+  }
+
+  const vbs = runExe('wscript.exe', ['//B','//Nologo',p.vbsPath], { allowFailure:true });
+  if (vbs.status !== 0) {
+    throw new Error(vbs.stderr || vbs.stdout || 'Không khởi động được Food Local Agent bằng VBS');
+  }
+
+  return {
+    ok:true,
+    started:true,
+    mode:status.mode || 'DIRECT_VBS',
+    task_name:TASK_NAME,
+    log_path:p.logPath
+  };
+}
+
 export function removeWindowsFoodAgentAutostart({ root, nodePath = process.execPath } = {}) {
   if (process.platform !== 'win32') return { ok:false, skipped:true, reason:'WINDOWS_ONLY' };
   runExe('schtasks.exe', ['/Delete','/TN',TASK_NAME,'/F'], { allowFailure:true });
