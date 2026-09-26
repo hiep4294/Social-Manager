@@ -79,8 +79,10 @@ async function downloadImage(imageUrl, targetDir) {
   return file;
 }
 
-function summarizeGraphqlMutationRequest(response) {
-  const request = response?.request?.();
+function summarizeGraphqlMutationRequest(source) {
+  const request = typeof source?.request === 'function'
+    ? source.request()
+    : source;
   const postData = String(request?.postData?.() || '');
   const params = new URLSearchParams(postData);
   const variablesRaw = String(params.get('variables') || '');
@@ -541,22 +543,58 @@ export async function executePostPage(page, payload, db) {
       };
     }
 
+    // Safe pre-publish diagnostic: capture the exact ComposerStoryCreateMutation
+    // request and abort it before Facebook receives the story. This proves
+    // whether the composer will submit media without creating another post.
+    let diagnosticPublishSummary = null;
+    let diagnosticPublishCaptured = false;
+
+    const diagnosticRouteHandler = async route => {
+      const request = route.request();
+
+      try {
+        if (request.method() !== 'POST') {
+          await route.continue();
+          return;
+        }
+
+        const params = new URLSearchParams(String(request.postData() || ''));
+
+        if (params.get('fb_api_req_friendly_name') !== 'ComposerStoryCreateMutation') {
+          await route.continue();
+          return;
+        }
+
+        diagnosticPublishSummary = summarizeGraphqlMutationRequest(request);
+        diagnosticPublishCaptured = true;
+        await route.abort('blockedbyclient');
+      } catch {
+        await route.continue().catch(() => {});
+      }
+    };
+
+    if (payload.diagnostic_abort_publish === true) {
+      await page.route('**/api/graphql*', diagnosticRouteHandler);
+    }
+
     // Register the create-story listener before clicking Post. Facebook can
     // delay the mutation while an optional post-interception dialog is shown.
-    const publishMutationPromise = page.waitForResponse(
-      response => {
-        try {
-          if (!response.url().includes('/api/graphql')) return false;
-          const request = response.request();
-          if (request.method() !== 'POST') return false;
-          const params = new URLSearchParams(String(request.postData() || ''));
-          return params.get('fb_api_req_friendly_name') === 'ComposerStoryCreateMutation';
-        } catch {
-          return false;
-        }
-      },
-      { timeout: 45_000 }
-    ).catch(() => null);
+    const publishMutationPromise = payload.diagnostic_abort_publish === true
+      ? null
+      : page.waitForResponse(
+          response => {
+            try {
+              if (!response.url().includes('/api/graphql')) return false;
+              const request = response.request();
+              if (request.method() !== 'POST') return false;
+              const params = new URLSearchParams(String(request.postData() || ''));
+              return params.get('fb_api_req_friendly_name') === 'ComposerStoryCreateMutation';
+            } catch {
+              return false;
+            }
+          },
+          { timeout: 45_000 }
+        ).catch(() => null);
 
     await postButton.click({ timeout: 4000 });
 
@@ -610,6 +648,47 @@ export async function executePostPage(page, payload, db) {
         break;
       }
       await sleep(500);
+    }
+
+    if (payload.diagnostic_abort_publish === true) {
+      for (let attempt = 0; attempt < 40 && !diagnosticPublishCaptured; attempt += 1) {
+        await sleep(250);
+      }
+
+      await page.unroute('**/api/graphql*', diagnosticRouteHandler).catch(() => {});
+      await page.keyboard.press('Escape').catch(() => {});
+
+      if (!diagnosticPublishCaptured || !diagnosticPublishSummary) {
+        throw Object.assign(
+          new Error('Không bắt được ComposerStoryCreateMutation ở chế độ diagnostic; Facebook có thể chưa đi tới bước submit'),
+          { code: 'NEEDS_REVIEW' }
+        );
+      }
+
+      const diagnosticPath = writePublishDiagnostic({
+        dedupe_marker: String(payload.dedupe_marker || ''),
+        page_url: target.url,
+        requested_image: Boolean(payload.image_url),
+        diagnostic_abort_publish: true,
+        request: diagnosticPublishSummary,
+        response: null,
+        http_ok: null,
+        graphql_errors: []
+      });
+
+      return {
+        ok: true,
+        dry_run: true,
+        diagnostic_abort_publish: true,
+        publish_aborted: true,
+        mutation_captured: true,
+        mutation_has_media_reference: Boolean(diagnosticPublishSummary.has_media_reference),
+        media_hints: diagnosticPublishSummary.media_hints,
+        publish_diagnostic: diagnosticPath || null,
+        page_name: target.name || payload.page_name || '',
+        page_url: target.url,
+        current_url: page.url()
+      };
     }
 
     const publishResponse = await publishMutationPromise;
