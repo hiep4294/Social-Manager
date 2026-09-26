@@ -23,7 +23,7 @@
     "provider": "facebook_extension",
     "max_attempts": 1,
     "require_verified": true,
-    "enabled": false
+    "enabled": true
   },
   "pages": [
     {
