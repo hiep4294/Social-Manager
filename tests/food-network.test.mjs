@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   foodPageBlueprints,
   foodRecipes,
@@ -78,4 +80,44 @@ assert.match(
   'bước thắng đường phải có hướng dẫn caramel phù hợp'
 );
 
-console.log(`Food Network OK: ${pages.length} pages, ${recipes.length} recipes, all recipes use detailed-v2 format with semantic prep checks.`);
+const foodAgentSource = fs.readFileSync(
+  path.resolve('scripts', 'food-local-agent.mjs'),
+  'utf8'
+);
+
+assert.match(
+  foodAgentSource,
+  /buildImagePrompt\(page, recipe\)/,
+  'Food Local Agent phải tạo prompt theo Page + món'
+);
+assert.match(
+  foodAgentSource,
+  /Typography tiếng Việt phải rõ ràng, đúng dấu/,
+  'Prompt phải yêu cầu chữ tiếng Việt rõ và đúng dấu'
+);
+assert.match(
+  foodAgentSource,
+  /chatgpt-food-poster-v3/,
+  'Ảnh nguồn phải có version poster ChatGPT'
+);
+assert.match(
+  foodAgentSource,
+  /sourceIsCurrentPoster/,
+  'Ảnh legacy phải được phát hiện và tạo lại'
+);
+assert.match(
+  foodAgentSource,
+  /do not add a second title\/logo layer/,
+  'Không được ghép title/logo lần hai lên poster ChatGPT'
+);
+
+const localConfig = JSON.parse(
+  fs.readFileSync(path.resolve('config', 'food-local-pages.json'), 'utf8')
+);
+
+assert.equal(localConfig.publish?.enabled, true, 'publish của Food Local Agent phải được bật');
+const enabledLocalPages = (localConfig.pages || []).filter(x => x.enabled);
+assert.equal(enabledLocalPages.length, 1, 'chỉ được bật đúng 1 Page ở giai đoạn hiện tại');
+assert.equal(enabledLocalPages[0].page_key, 'hom-nay-an-gi');
+
+console.log(`Food Network OK: ${pages.length} pages, ${recipes.length} recipes, detailed-v2 + ChatGPT poster-v3 + verified publish config.`);
