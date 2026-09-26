@@ -529,57 +529,146 @@ export async function executePostPage(page, payload, db) {
       };
     }
 
-    // Diagnostic-only mode: immediately before publish, capture and abort
-    // every GraphQL POST. This discovers Facebook's actual publish mutation
-    // without creating a post. Normal jobs never enter this branch.
+    // Diagnostic-only mode: use Chrome DevTools Protocol Fetch interception.
+    // Facebook may send publish traffic through a Service Worker, which
+    // page.route() cannot reliably intercept. CDP lets us pause the exact
+    // publish request, inspect its variables, then abort it before Facebook
+    // can create the story.
     if (payload.diagnostic_capture_graphql === true) {
       const captured = [];
-      let armedAt = Date.now();
+      const marker = String(payload.dedupe_marker || payload.message || '');
+      const armedAt = Date.now();
+      const cdp = await page.context().newCDPSession(page);
 
-      const routeHandler = async route => {
-        const request = route.request();
+      const analyzeMedia = variablesRaw => {
+        let variables = {};
+        try { variables = JSON.parse(String(variablesRaw || '{}')); } catch {}
 
-        try {
-          if (request.method() !== 'POST') {
-            await route.continue();
+        const hints = [];
+
+        const walk = (value, currentPath = '$', depth = 0) => {
+          if (depth > 12 || hints.length >= 100) return;
+
+          if (Array.isArray(value)) {
+            value.slice(0, 30).forEach((item, index) => {
+              walk(item, `${currentPath}[${index}]`, depth + 1);
+            });
             return;
           }
 
-          const params = new URLSearchParams(String(request.postData() || ''));
+          if (!value || typeof value !== 'object') return;
+
+          for (const [key, child] of Object.entries(value)) {
+            const nextPath = `${currentPath}.${key}`;
+
+            if (/photo|image|media|attachment|upload|asset/i.test(key)) {
+              let meaningful = false;
+              let summary = '';
+
+              if (Array.isArray(child)) {
+                meaningful = child.length > 0;
+                summary = `array(${child.length})`;
+              } else if (child && typeof child === 'object') {
+                const keys = Object.keys(child);
+                meaningful = keys.length > 0;
+                summary = `object(${keys.slice(0, 15).join(',')})`;
+              } else {
+                const text = String(child ?? '').trim();
+                meaningful = Boolean(text && text !== 'false' && text !== '0' && text !== 'null');
+                summary = text.slice(0, 180);
+              }
+
+              hints.push({
+                path: nextPath,
+                meaningful,
+                summary
+              });
+            }
+
+            walk(child, nextPath, depth + 1);
+            if (hints.length >= 100) break;
+          }
+        };
+
+        walk(variables);
+
+        return {
+          has_media_reference: hints.some(item => item.meaningful),
+          media_hints: hints
+        };
+      };
+
+      const pausedHandler = async event => {
+        const request = event.request || {};
+        const requestId = event.requestId;
+
+        try {
+          const method = String(request.method || '');
+          const postData = String(request.postData || '');
+
+          if (method !== 'POST') {
+            await cdp.send('Fetch.continueRequest', { requestId });
+            return;
+          }
+
+          const params = new URLSearchParams(postData);
           const friendlyName = String(params.get('fb_api_req_friendly_name') || '');
           const docId = String(params.get('doc_id') || '');
           const variablesRaw = String(params.get('variables') || '');
 
-          const mediaSnippets = [];
-          const regex = /.{0,100}(photo|image|media|attachment|upload|asset).{0,220}/gi;
-          let match = null;
+          const markerInRequest =
+            Boolean(marker) &&
+            (
+              variablesRaw.includes(marker) ||
+              postData.includes(marker) ||
+              postData.includes(encodeURIComponent(marker))
+            );
 
-          while ((match = regex.exec(variablesRaw)) && mediaSnippets.length < 30) {
-            mediaSnippets.push(String(match[0]).slice(0, 360));
+          const looksLikePublish =
+            markerInRequest ||
+            friendlyName === 'ComposerStoryCreateMutation';
+
+          if (!looksLikePublish) {
+            await cdp.send('Fetch.continueRequest', { requestId });
+            return;
           }
+
+          const media = analyzeMedia(variablesRaw);
 
           captured.push({
             elapsed_ms: Date.now() - armedAt,
-            url: request.url(),
+            url: String(request.url || ''),
             friendly_name: friendlyName,
             doc_id: docId,
+            marker_in_request: markerInRequest,
             variables_length: variablesRaw.length,
-            has_media_reference: mediaSnippets.length > 0,
-            media_snippets: mediaSnippets
+            has_media_reference: media.has_media_reference,
+            media_hints: media.media_hints
           });
 
-          await route.abort('blockedbyclient');
+          await cdp.send('Fetch.failRequest', {
+            requestId,
+            errorReason: 'Aborted'
+          });
         } catch {
-          await route.abort('blockedbyclient').catch(() => {});
+          await cdp.send('Fetch.continueRequest', { requestId }).catch(() => {});
         }
       };
 
-      await page.route('**/api/graphql*', routeHandler);
+      cdp.on('Fetch.requestPaused', pausedHandler);
+
+      await cdp.send('Fetch.enable', {
+        patterns: [
+          { urlPattern: '*facebook.com/*', resourceType: 'XHR', requestStage: 'Request' },
+          { urlPattern: '*facebook.com/*', resourceType: 'Fetch', requestStage: 'Request' }
+        ]
+      });
 
       await postButton.click({ timeout: 4000 });
 
       let interceptionDismissed = false;
-      for (let attempt = 0; attempt < 28; attempt += 1) {
+
+      for (let attempt = 0; attempt < 36; attempt += 1) {
         const dialogsAfterPost = page.locator('[role="dialog"]');
         const dialogCount = Math.min(15, await dialogsAfterPost.count().catch(() => 0));
 
@@ -595,28 +684,32 @@ export async function executePostPage(page, payload, db) {
           });
 
           const dismissCount = Math.min(10, await dismissButtons.count().catch(() => 0));
+
           for (let j = 0; j < dismissCount; j += 1) {
             const dismissButton = dismissButtons.nth(j);
             const visible = await dismissButton.isVisible({ timeout: 200 }).catch(() => false);
             const enabled = await dismissButton.isEnabled().catch(() => false);
             if (!visible || !enabled) continue;
+
             await dismissButton.click({ timeout: 3000 }).catch(() => {});
             interceptionDismissed = true;
             break;
           }
         }
 
-        if (captured.length > 0 && (interceptionDismissed || attempt >= 8)) break;
+        if (captured.length > 0) break;
         await sleep(300);
       }
 
-      // Keep collecting briefly after the publish interaction so auxiliary
-      // GraphQL calls do not get mistaken for the actual publish request.
-      for (let attempt = 0; attempt < 20; attempt += 1) {
+      // Keep the CDP interceptor armed briefly after the UI interaction in
+      // case Facebook submits asynchronously after dismissing the promotion.
+      for (let attempt = 0; attempt < 20 && captured.length === 0; attempt += 1) {
         await sleep(250);
       }
 
-      await page.unroute('**/api/graphql*', routeHandler).catch(() => {});
+      await cdp.send('Fetch.disable').catch(() => {});
+      cdp.off('Fetch.requestPaused', pausedHandler);
+      await cdp.detach().catch(() => {});
       await page.keyboard.press('Escape').catch(() => {});
 
       const diagnosticDir = path.resolve(process.cwd(), 'data');
@@ -629,8 +722,8 @@ export async function executePostPage(page, payload, db) {
           captured_at: new Date().toISOString(),
           page_url: target.url,
           requested_image: Boolean(payload.image_url),
-          dedupe_marker: String(payload.dedupe_marker || ''),
-          publish_aborted: true,
+          dedupe_marker: marker,
+          publish_aborted: captured.length > 0,
           interception_dismissed: interceptionDismissed,
           requests: captured
         }, null, 2),
@@ -641,7 +734,7 @@ export async function executePostPage(page, payload, db) {
         ok: true,
         dry_run: true,
         diagnostic_capture_graphql: true,
-        publish_aborted: true,
+        publish_aborted: captured.length > 0,
         requested_image: Boolean(payload.image_url),
         interception_dismissed: interceptionDismissed,
         captured_count: captured.length,
