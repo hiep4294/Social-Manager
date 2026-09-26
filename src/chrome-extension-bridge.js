@@ -106,7 +106,7 @@ if (!enabled) {
   const reservationTtlMs = Math.max(heartbeatTtlMs, Number(process.env.CHROME_EXTENSION_RESERVATION_TTL_MS || 60_000));
   const statusPath = path.join(publicDir, 'chrome-extension-status.json');
   const statePath = path.join(dataDir, 'chrome-extension-bridge.json');
-  const expectedVersion = '2.1.0';
+  const expectedVersion = '2.1.3';
 
   function newState() {
     return {
