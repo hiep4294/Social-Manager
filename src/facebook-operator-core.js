@@ -30,6 +30,39 @@ function cleanUrl(value) {
   }
 }
 
+function cleanImageSource(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+
+  // Remote images remain restricted to normal HTTP(S).
+  const remote = cleanUrl(raw);
+  if (remote) return remote;
+
+  // Local operator jobs can safely carry a generated/uploaded image as a
+  // data URL. Restrict the MIME type, require base64 and cap payload size.
+  // 16 MiB encoded is ample for social images while preventing unbounded DB
+  // payloads or arbitrary data: schemes.
+  if (raw.length > 16 * 1024 * 1024) return null;
+
+  const match = raw.match(
+    /^data:(image\/(?:png|jpeg|jpg|webp|gif));base64,([A-Za-z0-9+/=\r\n]+)$/i
+  );
+
+  if (!match) return null;
+
+  const base64 = match[2].replace(/[\r\n]/g, '');
+  if (!base64 || base64.length % 4 !== 0) return null;
+
+  try {
+    const decoded = Buffer.from(base64, 'base64');
+    if (!decoded.length) return null;
+  } catch {
+    return null;
+  }
+
+  return `data:${match[1].toLowerCase()};base64,${base64}`;
+}
+
 function normalizeGroupTarget(payload, action) {
   payload.group_url = cleanFacebookUrl(payload.group_url);
   payload.group_name = String(payload.group_name || '').trim();
@@ -75,7 +108,7 @@ export function normalizeOperatorJob(input = {}) {
     payload.page_url = cleanFacebookUrl(payload.page_url);
     payload.page_name = String(payload.page_name || '').trim();
     payload.message = String(payload.message || '').trim();
-    payload.image_url = cleanUrl(payload.image_url);
+    payload.image_url = cleanImageSource(payload.image_url);
     if (!payload.page_url && !payload.page_name) return { ok: false, error: 'post_page cần page_url hoặc page_name' };
     if (!payload.message && !payload.image_url) return { ok: false, error: 'post_page cần message hoặc image_url' };
   }
@@ -109,7 +142,7 @@ export function normalizeOperatorJob(input = {}) {
 
   if (action === 'post_group') {
     payload.message = String(payload.message || '').trim();
-    payload.image_url = cleanUrl(payload.image_url);
+    payload.image_url = cleanImageSource(payload.image_url);
     if (!payload.message && !payload.image_url) return { ok: false, error: 'post_group cần message hoặc image_url' };
   }
 
