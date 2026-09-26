@@ -66,11 +66,17 @@ if (String(state?.last_post_date || '') === date) {
 }
 
 const existing = safeJson(jobPath);
-if (existing) {
+if (existing && existing.status !== 'SKIPPED_LATE') {
   console.log('FOOD_POST_NOW=EXISTING_JOB');
   console.log(`JOB_STATUS=${existing.status || 'UNKNOWN'}`);
   console.log(`JOB_FILE=${jobPath}`);
   process.exit(0);
+}
+
+if (existing?.status === 'SKIPPED_LATE') {
+  const archived = `${jobPath}.skipped-late-${Date.now()}.bak`;
+  fs.renameSync(jobPath, archived);
+  console.log(`ARCHIVED_SKIPPED_LATE=${archived}`);
 }
 
 const usedRecipeIds = (state?.recipes || [])
