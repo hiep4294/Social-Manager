@@ -965,7 +965,7 @@ export async function executePostPage(page, payload, db) {
       pageProfileId = String(new URL(target.url).searchParams.get('id') || '');
     } catch {}
 
-    for (const candidateActor of [actorId, pageProfileId]) {
+    for (const candidateActor of [pageProfileId, actorId]) {
       if (!candidateActor || !publishPostId) continue;
       addDirectUrl(`https://www.facebook.com/${candidateActor}/posts/${publishPostId}/`);
       addDirectUrl(
@@ -973,82 +973,84 @@ export async function executePostPage(page, payload, db) {
       );
     }
 
-    for (const directUrl of directUrls) {
-      if (verified) break;
+    for (let directAttempt = 0; directAttempt < 4 && !verified; directAttempt += 1) {
+      for (const directUrl of directUrls) {
+        if (verified) break;
 
-      try {
-        await page.goto(directUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-        await sleep(3500);
-        await assertNoCheckpoint(page);
+        try {
+          await page.goto(directUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+          await sleep(2500 + directAttempt * 1000);
+          await assertNoCheckpoint(page);
 
-        const articles = page.locator('[role="article"]');
-        const directCount = Math.min(30, await articles.count().catch(() => 0));
+          const articles = page.locator('[role="article"]');
+          const directCount = Math.min(30, await articles.count().catch(() => 0));
 
-        for (let i = 0; i < directCount && !verified; i += 1) {
-          const article = articles.nth(i);
-          const text = String(await article.innerText().catch(() => ''))
-            .replace(/\s+/g, ' ');
+          for (let i = 0; i < directCount && !verified; i += 1) {
+            const article = articles.nth(i);
+            const text = String(await article.innerText().catch(() => ''))
+              .replace(/\s+/g, ' ');
 
-          if (marker && !text.includes(marker)) continue;
+            if (marker && !text.includes(marker)) continue;
 
-          let mediaVerified = !payload.image_url;
+            let mediaVerified = !payload.image_url;
 
-          if (payload.image_url) {
-            const images = article.locator('img');
-            const imageCount = Math.min(40, await images.count().catch(() => 0));
+            if (payload.image_url) {
+              const images = article.locator('img');
+              const imageCount = Math.min(40, await images.count().catch(() => 0));
 
-            for (let j = 0; j < imageCount && !mediaVerified; j += 1) {
-              const dims = await images.nth(j).evaluate(img => {
-                const rect = img.getBoundingClientRect();
-                return {
-                  naturalWidth: Number(img.naturalWidth || 0),
-                  naturalHeight: Number(img.naturalHeight || 0),
-                  width: Number(rect.width || 0),
-                  height: Number(rect.height || 0)
-                };
-              }).catch(() => null);
+              for (let j = 0; j < imageCount && !mediaVerified; j += 1) {
+                const dims = await images.nth(j).evaluate(img => {
+                  const rect = img.getBoundingClientRect();
+                  return {
+                    naturalWidth: Number(img.naturalWidth || 0),
+                    naturalHeight: Number(img.naturalHeight || 0),
+                    width: Number(rect.width || 0),
+                    height: Number(rect.height || 0)
+                  };
+                }).catch(() => null);
 
-              if (
-                dims &&
-                (
-                  (dims.naturalWidth >= 300 && dims.naturalHeight >= 180) ||
-                  (dims.width >= 300 && dims.height >= 180)
-                )
-              ) {
-                mediaVerified = true;
+                if (
+                  dims &&
+                  (
+                    (dims.naturalWidth >= 300 && dims.naturalHeight >= 180) ||
+                    (dims.width >= 300 && dims.height >= 180)
+                  )
+                ) {
+                  mediaVerified = true;
+                }
+              }
+
+              if (!mediaVerified) {
+                const photoLinks = article.locator(
+                  'a[href*="/photo/"],' +
+                  'a[href*="/photos/"],' +
+                  'a[href*="photo.php?fbid="],' +
+                  'a[href*="media/set"]'
+                );
+
+                mediaVerified = (await photoLinks.count().catch(() => 0)) > 0;
               }
             }
 
-            if (!mediaVerified) {
-              const photoLinks = article.locator(
-                'a[href*="/photo/"],' +
-                'a[href*="/photos/"],' +
-                'a[href*="photo.php?fbid="],' +
-                'a[href*="media/set"]'
-              );
+            if (!mediaVerified) continue;
 
-              mediaVerified = (await photoLinks.count().catch(() => 0)) > 0;
-            }
-          }
-
-          if (!mediaVerified) continue;
-
-          verified = true;
-          verifiedMedia = mediaVerified;
-          verifiedUrl = page.url();
-        }
-
-        if (!verified && !payload.image_url && marker) {
-          const body = String(await page.locator('body').innerText().catch(() => ''))
-            .replace(/\s+/g, ' ');
-
-          if (body.includes(marker)) {
             verified = true;
-            verifiedMedia = true;
+            verifiedMedia = mediaVerified;
             verifiedUrl = page.url();
           }
-        }
-      } catch {}
+
+          if (!verified && !payload.image_url && marker) {
+            const body = String(await page.locator('body').innerText().catch(() => ''))
+              .replace(/\s+/g, ' ');
+
+            if (body.includes(marker)) {
+              verified = true;
+              verifiedMedia = true;
+              verifiedUrl = page.url();
+            }
+          }
+        } catch {}
+      }
     }
 
     for (let attempt = 0; attempt < 6 && !verified; attempt += 1) {
