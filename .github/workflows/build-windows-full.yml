@@ -2,6 +2,13 @@ name: Build Windows Full Installer
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - stable
+    paths:
+      - ".github/workflows/build-windows-full.yml"
+      - "installer/windows/**"
+      - "src/windows-agent-autostart.js"
 
 permissions:
   contents: write
@@ -81,8 +88,8 @@ jobs:
       - name: Build ZIP
         shell: pwsh
         run: |
-          $v="\${{ steps.meta.outputs.version }}"
-          $s="\${{ steps.meta.outputs.stage }}"
+          $v="${{ steps.meta.outputs.version }}"
+          $s="${{ steps.meta.outputs.stage }}"
           Compress-Archive -Path (Join-Path $s "*") -DestinationPath (Join-Path $env:GITHUB_WORKSPACE "dist\SocialManager-Full-v$v.zip") -CompressionLevel Optimal -Force
 
       - name: Install Inno Setup
@@ -92,8 +99,8 @@ jobs:
       - name: Build EXE
         shell: pwsh
         run: |
-          $v="\${{ steps.meta.outputs.version }}"
-          $s="\${{ steps.meta.outputs.stage }}"
+          $v="${{ steps.meta.outputs.version }}"
+          $s="${{ steps.meta.outputs.stage }}"
           $o=Join-Path $env:GITHUB_WORKSPACE "dist"
           $iscc=Join-Path ([Environment]::GetFolderPath("ProgramFilesX86")) "Inno Setup 6\ISCC.exe"
           if(-not(Test-Path $iscc)){throw "No ISCC"}
@@ -103,7 +110,7 @@ jobs:
       - name: SHA256
         shell: pwsh
         run: |
-          $v="\${{ steps.meta.outputs.version }}"
+          $v="${{ steps.meta.outputs.version }}"
           $d=Join-Path $env:GITHUB_WORKSPACE "dist"
           $lines=foreach($x in @((Join-Path $d "SocialManager-Setup-v$v.exe"),(Join-Path $d "SocialManager-Full-v$v.zip"))){
             $h=Get-FileHash $x -Algorithm SHA256
@@ -114,19 +121,19 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SocialManager-Windows-Full-v\${{ steps.meta.outputs.version }}
+          name: SocialManager-Windows-Full-v${{ steps.meta.outputs.version }}
           path: |
-            dist/SocialManager-Setup-v\${{ steps.meta.outputs.version }}.exe
-            dist/SocialManager-Full-v\${{ steps.meta.outputs.version }}.zip
+            dist/SocialManager-Setup-v${{ steps.meta.outputs.version }}.exe
+            dist/SocialManager-Full-v${{ steps.meta.outputs.version }}.zip
             dist/SHA256SUMS.txt
           if-no-files-found: error
 
       - name: Publish release
         shell: pwsh
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          $v="\${{ steps.meta.outputs.version }}"
+          $v="${{ steps.meta.outputs.version }}"
           $short=(git rev-parse --short=7 HEAD).Trim()
           $tag="windows-v$v-$short"
           gh release create $tag --target stable --title "KODS Social Manager Windows v$v ($short)" --notes "Full Windows package: EXE + ZIP. Bundled Node.js, MinGit, Chrome for Testing and node_modules. No user secrets, DB or Facebook cookies included."
