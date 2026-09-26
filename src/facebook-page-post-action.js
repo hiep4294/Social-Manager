@@ -868,6 +868,11 @@ export async function executePostPage(page, payload, db) {
       if (Array.isArray(publishPayload?.errors)) publishErrors = publishPayload.errors;
     } catch {}
 
+    const storyCreate = publishPayload?.data?.story_create || {};
+    const publishStoryId = String(storyCreate.story_id || '');
+    const publishPostId = String(storyCreate.post_id || '');
+    const publishFlow = String(storyCreate.publishing_flow || '');
+
     const publishDiagnosticFile = path.resolve(
       process.cwd(),
       'data',
@@ -890,6 +895,11 @@ export async function executePostPage(page, payload, db) {
             has_media_reference: publishRequestHasMedia
           },
           response_http_ok: publishResponse.ok(),
+          response_evidence: {
+            story_id: publishStoryId,
+            post_id: publishPostId,
+            publishing_flow: publishFlow
+          },
           response_payload: publishPayload
         }, null, 2),
         'utf8'
@@ -928,6 +938,118 @@ export async function executePostPage(page, payload, db) {
 
     let verified = !marker;
     let verifiedUrl = '';
+    let verifiedMedia = !payload.image_url;
+
+    // GraphQL returns the exact post/story identifiers. Prefer verifying that
+    // permalink directly; the Page feed can lag, reorder, or omit a newly
+    // published ASYNC_SILENT story for several minutes.
+    const directUrls = [];
+
+    const addDirectUrl = value => {
+      const url = String(value || '').trim();
+      if (!url || directUrls.includes(url)) return;
+      directUrls.push(url);
+    };
+
+    let actorId = '';
+    if (publishStoryId) {
+      try {
+        const decodedStoryId = Buffer.from(publishStoryId, 'base64').toString('utf8');
+        const actorMatch = decodedStoryId.match(/_I(\d+):(\d+)/);
+        if (actorMatch) actorId = actorMatch[1];
+      } catch {}
+    }
+
+    let pageProfileId = '';
+    try {
+      pageProfileId = String(new URL(target.url).searchParams.get('id') || '');
+    } catch {}
+
+    for (const candidateActor of [actorId, pageProfileId]) {
+      if (!candidateActor || !publishPostId) continue;
+      addDirectUrl(`https://www.facebook.com/${candidateActor}/posts/${publishPostId}/`);
+      addDirectUrl(
+        `https://www.facebook.com/permalink.php?story_fbid=${publishPostId}&id=${candidateActor}`
+      );
+    }
+
+    for (const directUrl of directUrls) {
+      if (verified) break;
+
+      try {
+        await page.goto(directUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+        await sleep(3500);
+        await assertNoCheckpoint(page);
+
+        const articles = page.locator('[role="article"]');
+        const directCount = Math.min(30, await articles.count().catch(() => 0));
+
+        for (let i = 0; i < directCount && !verified; i += 1) {
+          const article = articles.nth(i);
+          const text = String(await article.innerText().catch(() => ''))
+            .replace(/\s+/g, ' ');
+
+          if (marker && !text.includes(marker)) continue;
+
+          let mediaVerified = !payload.image_url;
+
+          if (payload.image_url) {
+            const images = article.locator('img');
+            const imageCount = Math.min(40, await images.count().catch(() => 0));
+
+            for (let j = 0; j < imageCount && !mediaVerified; j += 1) {
+              const dims = await images.nth(j).evaluate(img => {
+                const rect = img.getBoundingClientRect();
+                return {
+                  naturalWidth: Number(img.naturalWidth || 0),
+                  naturalHeight: Number(img.naturalHeight || 0),
+                  width: Number(rect.width || 0),
+                  height: Number(rect.height || 0)
+                };
+              }).catch(() => null);
+
+              if (
+                dims &&
+                (
+                  (dims.naturalWidth >= 300 && dims.naturalHeight >= 180) ||
+                  (dims.width >= 300 && dims.height >= 180)
+                )
+              ) {
+                mediaVerified = true;
+              }
+            }
+
+            if (!mediaVerified) {
+              const photoLinks = article.locator(
+                'a[href*="/photo/"],' +
+                'a[href*="/photos/"],' +
+                'a[href*="photo.php?fbid="],' +
+                'a[href*="media/set"]'
+              );
+
+              mediaVerified = (await photoLinks.count().catch(() => 0)) > 0;
+            }
+          }
+
+          if (!mediaVerified) continue;
+
+          verified = true;
+          verifiedMedia = mediaVerified;
+          verifiedUrl = page.url();
+        }
+
+        if (!verified && !payload.image_url && marker) {
+          const body = String(await page.locator('body').innerText().catch(() => ''))
+            .replace(/\s+/g, ' ');
+
+          if (body.includes(marker)) {
+            verified = true;
+            verifiedMedia = true;
+            verifiedUrl = page.url();
+          }
+        }
+      } catch {}
+    }
 
     for (let attempt = 0; attempt < 6 && !verified; attempt += 1) {
       await page.goto(target.url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
@@ -1005,6 +1127,7 @@ export async function executePostPage(page, payload, db) {
           if (!mediaVerified) continue;
 
           verified = true;
+          verifiedMedia = mediaVerified;
 
           const links = article.locator(
             'a[href*="permalink"],a[href*="story_fbid"],a[href*="/posts/"]'
@@ -1028,6 +1151,7 @@ export async function executePostPage(page, payload, db) {
         // Text-only fallback is valid only when no media was requested.
         if (!payload.image_url && marker && body.includes(marker)) {
           verified = true;
+          verifiedMedia = true;
           break;
         }
       }
@@ -1037,8 +1161,8 @@ export async function executePostPage(page, payload, db) {
       throw Object.assign(
         new Error(
           payload.image_url
-            ? 'ComposerStoryCreateMutation thành công và request có media nhưng chưa xác minh thấy bài kèm ảnh trên timeline; không tự retry để tránh đăng trùng; diagnostic=' + publishDiagnosticFile
-            : 'ComposerStoryCreateMutation thành công nhưng chưa xác minh thấy bài trên timeline; không tự retry để tránh đăng trùng; diagnostic=' + publishDiagnosticFile
+            ? 'ComposerStoryCreateMutation thành công và request có media nhưng chưa xác minh trực tiếp được bài kèm ảnh; không tự retry để tránh đăng trùng; post_id=' + publishPostId + '; diagnostic=' + publishDiagnosticFile
+            : 'ComposerStoryCreateMutation thành công nhưng chưa xác minh trực tiếp được bài; không tự retry để tránh đăng trùng; post_id=' + publishPostId + '; diagnostic=' + publishDiagnosticFile
         ),
         { code: 'NEEDS_REVIEW' }
       );
@@ -1050,7 +1174,13 @@ export async function executePostPage(page, payload, db) {
       publish_mutation: 'ComposerStoryCreateMutation',
       mutation_has_media_reference: Boolean(publishRequestHasMedia),
       publish_diagnostic: publishDiagnosticFile,
-      media_verified: Boolean(payload.image_url ? true : false),
+      story_id: publishStoryId || null,
+      post_id: publishPostId || null,
+      publishing_flow: publishFlow || null,
+      media_verified: Boolean(verifiedMedia),
+      verification_source: verifiedUrl && publishPostId && verifiedUrl.includes(publishPostId)
+        ? 'DIRECT_POST_ID'
+        : 'PAGE_FEED',
       post_url: verifiedUrl || null,
       page_name: target.name || payload.page_name || '',
       page_url: target.url,
