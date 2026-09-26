@@ -60,4 +60,22 @@ for (const recipe of recipes) {
   assert.match(post.content, /CÁCH DÙNG & BẢO QUẢN/);
 }
 
-console.log(`Food Network OK: ${pages.length} pages, ${recipes.length} recipes, all recipes use detailed-v2 format.`);
+const thitKhoTrung = recipes.find(x => x.title === 'Thịt kho trứng');
+const thitKhoPost = buildRecipePost({
+  page:{ slot:6, name:'Món Ngon Dễ Làm', theme:'Công thức cơ bản', voice:'rõ bước, dễ theo' },
+  recipe:thitKhoTrung
+});
+
+assert.match(
+  thitKhoPost.content,
+  /6 trứng gà: Kiểm tra vỏ nguyên, sạch/,
+  'trứng gà không được phân loại nhầm thành thịt gia cầm'
+);
+
+assert.match(
+  thitKhoPost.content,
+  /màu cánh gián[\s\S]*Không để đường chuyển nâu đen/,
+  'bước thắng đường phải có hướng dẫn caramel phù hợp'
+);
+
+console.log(`Food Network OK: ${pages.length} pages, ${recipes.length} recipes, all recipes use detailed-v2 format with semantic prep checks.`);
