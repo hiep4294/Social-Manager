@@ -610,7 +610,9 @@ export async function executePostPage(page, payload, db) {
         await sleep(300);
       }
 
-      for (let attempt = 0; attempt < 30 && captured.length === 0; attempt += 1) {
+      // Keep collecting briefly after the publish interaction so auxiliary
+      // GraphQL calls do not get mistaken for the actual publish request.
+      for (let attempt = 0; attempt < 20; attempt += 1) {
         await sleep(250);
       }
 
