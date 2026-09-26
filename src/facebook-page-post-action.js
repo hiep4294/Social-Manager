@@ -529,6 +529,128 @@ export async function executePostPage(page, payload, db) {
       };
     }
 
+    // Diagnostic-only mode: immediately before publish, capture and abort
+    // every GraphQL POST. This discovers Facebook's actual publish mutation
+    // without creating a post. Normal jobs never enter this branch.
+    if (payload.diagnostic_capture_graphql === true) {
+      const captured = [];
+      let armedAt = Date.now();
+
+      const routeHandler = async route => {
+        const request = route.request();
+
+        try {
+          if (request.method() !== 'POST') {
+            await route.continue();
+            return;
+          }
+
+          const params = new URLSearchParams(String(request.postData() || ''));
+          const friendlyName = String(params.get('fb_api_req_friendly_name') || '');
+          const docId = String(params.get('doc_id') || '');
+          const variablesRaw = String(params.get('variables') || '');
+
+          const mediaSnippets = [];
+          const regex = /.{0,100}(photo|image|media|attachment|upload|asset).{0,220}/gi;
+          let match = null;
+
+          while ((match = regex.exec(variablesRaw)) && mediaSnippets.length < 30) {
+            mediaSnippets.push(String(match[0]).slice(0, 360));
+          }
+
+          captured.push({
+            elapsed_ms: Date.now() - armedAt,
+            url: request.url(),
+            friendly_name: friendlyName,
+            doc_id: docId,
+            variables_length: variablesRaw.length,
+            has_media_reference: mediaSnippets.length > 0,
+            media_snippets: mediaSnippets
+          });
+
+          await route.abort('blockedbyclient');
+        } catch {
+          await route.abort('blockedbyclient').catch(() => {});
+        }
+      };
+
+      await page.route('**/api/graphql*', routeHandler);
+
+      await postButton.click({ timeout: 4000 });
+
+      let interceptionDismissed = false;
+      for (let attempt = 0; attempt < 28; attempt += 1) {
+        const dialogsAfterPost = page.locator('[role="dialog"]');
+        const dialogCount = Math.min(15, await dialogsAfterPost.count().catch(() => 0));
+
+        for (let i = 0; i < dialogCount && !interceptionDismissed; i += 1) {
+          const candidateDialog = dialogsAfterPost.nth(i);
+          if (!(await candidateDialog.isVisible({ timeout: 200 }).catch(() => false))) continue;
+
+          const dialogText = String(await candidateDialog.innerText().catch(() => ''));
+          if (!/Trò chuyện trực tiếp với mọi người|Gọi ngay|chat with people|call now/i.test(dialogText)) continue;
+
+          const dismissButtons = candidateDialog.getByRole('button', {
+            name: /^(Lúc khác|Để sau|Not now|Skip|Maybe later|Later)$/i
+          });
+
+          const dismissCount = Math.min(10, await dismissButtons.count().catch(() => 0));
+          for (let j = 0; j < dismissCount; j += 1) {
+            const dismissButton = dismissButtons.nth(j);
+            const visible = await dismissButton.isVisible({ timeout: 200 }).catch(() => false);
+            const enabled = await dismissButton.isEnabled().catch(() => false);
+            if (!visible || !enabled) continue;
+            await dismissButton.click({ timeout: 3000 }).catch(() => {});
+            interceptionDismissed = true;
+            break;
+          }
+        }
+
+        if (captured.length > 0 && (interceptionDismissed || attempt >= 8)) break;
+        await sleep(300);
+      }
+
+      for (let attempt = 0; attempt < 30 && captured.length === 0; attempt += 1) {
+        await sleep(250);
+      }
+
+      await page.unroute('**/api/graphql*', routeHandler).catch(() => {});
+      await page.keyboard.press('Escape').catch(() => {});
+
+      const diagnosticDir = path.resolve(process.cwd(), 'data');
+      fs.mkdirSync(diagnosticDir, { recursive: true });
+      const diagnosticFile = path.join(diagnosticDir, 'facebook-publish-graphql-diagnostic.json');
+
+      fs.writeFileSync(
+        diagnosticFile,
+        JSON.stringify({
+          captured_at: new Date().toISOString(),
+          page_url: target.url,
+          requested_image: Boolean(payload.image_url),
+          dedupe_marker: String(payload.dedupe_marker || ''),
+          publish_aborted: true,
+          interception_dismissed: interceptionDismissed,
+          requests: captured
+        }, null, 2),
+        'utf8'
+      );
+
+      return {
+        ok: true,
+        dry_run: true,
+        diagnostic_capture_graphql: true,
+        publish_aborted: true,
+        requested_image: Boolean(payload.image_url),
+        interception_dismissed: interceptionDismissed,
+        captured_count: captured.length,
+        captured_requests: captured,
+        diagnostic_file: diagnosticFile,
+        page_name: target.name || payload.page_name || '',
+        page_url: target.url,
+        current_url: page.url()
+      };
+    }
+
     // Register the create-story listener before clicking Post. Facebook can
     // delay the mutation while an optional post-interception dialog is shown.
     const publishMutationPromise = page.waitForResponse(
