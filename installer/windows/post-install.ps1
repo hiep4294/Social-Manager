@@ -72,10 +72,14 @@ Write-Utf8 $envFile $t
 Push-Location $root
 try{
   & $node "scripts\manage-facebook-operator-autostart.mjs" install
-  if($LASTEXITCODE-ne 0){throw "Auto-start loi"}
+  if($LASTEXITCODE-ne 0){throw "Facebook Operator auto-start loi"}
+
+  & $node "scripts\manage-food-local-agent-autostart.mjs" install
+  if($LASTEXITCODE-ne 0){throw "Food Local Agent auto-start loi"}
 }finally{Pop-Location}
 
 try{schtasks.exe /Run /TN "SocialManagerFacebookOperatorAgent"|Out-Null}catch{}
+try{schtasks.exe /Run /TN "SocialManagerFoodLocalAgent"|Out-Null}catch{}
 
 $desktop=[Environment]::GetFolderPath("Desktop")
 $programs=[Environment]::GetFolderPath("Programs")
