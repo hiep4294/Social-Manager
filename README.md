@@ -59,6 +59,12 @@ SCHEDULED -> WAITING_IMAGE -> generate_food_image
 
 Chi tiết kỹ thuật, invariant chống trùng và acceptance gate: [docs/FOOD_IMAGE_PIPELINE.md](docs/FOOD_IMAGE_PIPELINE.md).
 
+## Quy trình đăng Facebook trực tiếp
+
+Luồng đăng Facebook Page kèm ảnh đã được kiểm chứng thực tế bằng Direct Playwright: dùng Chrome profile riêng, ưu tiên `local_image_path`, xác minh `ComposerStoryCreateMutation`, `post_id` và media trước khi chuyển job sang `VERIFIED`.
+
+Quy trình chuẩn, invariant chống đăng trùng và acceptance gate: [docs/FACEBOOK_DIRECT_PUBLISH_PIPELINE.md](docs/FACEBOOK_DIRECT_PUBLISH_PIPELINE.md).
+
 ## Quy trình phát triển hiện tại
 
 Ưu tiên kiểm thử trên GitHub trước:
