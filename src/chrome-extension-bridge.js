@@ -364,8 +364,10 @@ if (!enabled) {
           service: 'social-manager-chrome-extension-bridge',
           paired: Boolean(state.paired),
           extension_online: online(),
+          extension_version: extensionVersion,
           last_heartbeat_at: lastHeartbeatAt,
           expected_version: expectedVersion,
+          reload_required: Boolean(extensionVersion && extensionVersion !== expectedVersion),
           supported_actions: CHROME_EXTENSION_ACTIONS
         });
       }

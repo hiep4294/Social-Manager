@@ -667,7 +667,7 @@ async function processPage(page) {
   if (state.last_post_date === due.date) return;
   let job = loadJob(page, due.date);
 
-  if (due.before) return;
+  if (due.before && !job?.manual_run) return;
 
   if (due.late && !job) {
     job = {

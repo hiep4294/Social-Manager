@@ -1,4 +1,4 @@
-# Social Manager V1.2.1
+# Social Manager V2.1.3
 
 [▶ Mở Social Manager bằng GitHub Codespaces](https://codespaces.new/hiep4294/Social-Manager?quickstart=1)
 
@@ -43,6 +43,21 @@ npm run codespace
 - Docker để triển khai VPS sau khi kiểm thử xong.
 
 > TikTok, Zalo OA và Google Business Profile chưa nằm trong V1.2.
+
+## Quy trình tạo ảnh món ăn bằng ChatGPT
+
+Pipeline ảnh chuẩn đã được chốt theo state machine:
+
+```text
+SCHEDULED -> WAITING_IMAGE -> generate_food_image
+-> EXTENSION_QUEUED -> PROCESSING
+-> DONE + verified_download
+-> IMAGE_READY -> COMPOSED
+```
+
+`COMPOSED` là điểm hoàn thành của phần tạo ảnh: file final phải tồn tại và đạt 1080 x 1080 trước khi chuyển sang pipeline đăng Facebook.
+
+Chi tiết kỹ thuật, invariant chống trùng và acceptance gate: [docs/FOOD_IMAGE_PIPELINE.md](docs/FOOD_IMAGE_PIPELINE.md).
 
 ## Quy trình phát triển hiện tại
 
