@@ -592,19 +592,77 @@ async function processImageStage(page, recipe, job) {
     return false;
   }
 
+  const maxAttempts = Math.max(
+    1,
+    Number(
+      config.image_generation?.max_attempts ||
+      2
+    )
+  );
+
   if (row.status === 'DONE') {
     const result = operatorResult(row);
-    if (!result.verified_download || !result.download_path) {
-      throw new Error('Extension báo DONE nhưng không có download_path đã xác minh');
+
+    if (
+      !result.verified_download ||
+      !result.download_path
+    ) {
+      job.error =
+        'Extension b?o DONE nh?ng thi?u file download ?? x?c minh';
+
+      if (
+        Number(job.image_attempts || 0) <
+        maxAttempts
+      ) {
+        job.image_job_id=null;
+        job.status='IMAGE_RETRY_PENDING';
+        return false;
+      }
+
+      job.status='FAILED_IMAGE';
+      return false;
     }
-    const imported = await importDownloadedImage(result.download_path, recipe);
-    job.status = 'IMAGE_READY';
-    job.source_path = imported.source;
-    job.source_sha256 = imported.sha256;
-    return true;
+
+    try {
+      const imported =
+        await importDownloadedImage(
+          result.download_path,
+          recipe
+        );
+
+      job.status='IMAGE_READY';
+      job.source_path=imported.source;
+      job.source_sha256=imported.sha256;
+      job.error=null;
+
+      return true;
+    } catch (error) {
+      const importError =
+        String(error?.message || error);
+
+      log('IMAGE_IMPORT_REJECTED',{
+        page_key:page.page_key,
+        recipe_code:recipeCode(recipe.id),
+        image_job_id:row.id,
+        error:importError
+      });
+
+      job.error=importError;
+
+      if (
+        Number(job.image_attempts || 0) <
+        maxAttempts
+      ) {
+        job.image_job_id=null;
+        job.status='IMAGE_RETRY_PENDING';
+        return false;
+      }
+
+      job.status='FAILED_IMAGE';
+      return false;
+    }
   }
 
-  const maxAttempts = Math.max(1, Number(config.image_generation?.max_attempts || 2));
   if (Number(job.image_attempts || 0) < maxAttempts) {
     log('IMAGE_RETRY', {
       page_key:page.page_key,
@@ -775,7 +833,7 @@ async function bridgeHealth() {
 async function ensureBridge() {
   let health = await bridgeHealth();
   if (health?.ok) {
-    if (String(health.expected_version || '') !== '2.1.3') {
+    if (String(health.expected_version || '') !== '2.1.5') {
       throw new Error(`Bridge đang chạy phiên bản cũ expected_version=${health.expected_version || 'unknown'}; cần restart`);
     }
     return health;

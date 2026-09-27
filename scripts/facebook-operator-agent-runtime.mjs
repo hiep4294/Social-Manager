@@ -13,7 +13,8 @@ try {
 
 const backgroundOnly = String(process.env.FB_AGENT_BACKGROUND_ONLY ?? 'true').toLowerCase() !== 'false';
 if (backgroundOnly) {
-  process.env.FB_OPERATOR_HEADLESS = 'true';
+  process.env.FB_OPERATOR_HEADLESS = 'false';
+  process.env.FB_OPERATOR_WINDOW_OFFSCREEN = 'true';
   process.env.FB_OPERATOR_PROFILE_DIR = path.join(root, 'data', 'facebook-browser-profile-bg');
   process.env.CHROME_EXTENSION_BRIDGE_ENABLED = 'false';
 }
@@ -21,7 +22,8 @@ const foodAutoMarker = path.join(root, 'data', 'food-network-auto.enabled');
 process.env.FOOD_NETWORK_AUTO_ENABLED = fs.existsSync(foodAutoMarker) ? 'true' : 'false';
 
 process.env.FB_OPERATOR_ENABLED = 'true';
-process.env.FB_OPERATOR_HEADLESS ||= 'true';
+process.env.FB_OPERATOR_HEADLESS ||= 'false';
+process.env.FB_OPERATOR_WINDOW_OFFSCREEN ||= 'true';
 process.env.FB_OPERATOR_POLL_MS ||= '30000';
 process.env.FB_OPERATOR_PROFILE_DIR ||= path.join(root, 'data', 'facebook-browser-profile-bg');
 process.env.FB_OPERATOR_COMMAND_POLL_ENABLED = 'true';

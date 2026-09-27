@@ -84,7 +84,7 @@ function sendButton() {
 
 function imageCandidates() {
   return [...document.querySelectorAll('main img')]
-    .filter(img => visible(img) && img.complete && img.naturalWidth >= 256 && img.naturalHeight >= 256)
+    .filter(img => visible(img) && img.complete && img.naturalWidth >= 512 && img.naturalHeight >= 512)
     .filter(img => !/avatar|profile/i.test(String(img.alt || '')));
 }
 
@@ -98,17 +98,37 @@ function downloadButton(root = document) {
 
 async function findDownloadForImage(img) {
   let cur = img;
+
   for (let i = 0; i < 8 && cur; i += 1, cur = cur.parentElement) {
     const button = downloadButton(cur);
     if (button) return button;
   }
 
-  img.scrollIntoView({ block: 'center', inline: 'center' });
+  img.scrollIntoView({
+    block: 'center',
+    inline: 'center'
+  });
+
   await sleep(400);
-  try { img.click(); } catch {}
+
+  try {
+    img.click();
+  } catch {}
+
   await sleep(900);
 
-  return downloadButton(document);
+  const dialogs = [
+    ...document.querySelectorAll('[role="dialog"]')
+  ].filter(visible);
+
+  for (let i = dialogs.length - 1; i >= 0; i -= 1) {
+    const button = downloadButton(dialogs[i]);
+    if (button) return button;
+  }
+
+  // Kh?ng fallback ra to?n document:
+  // tr?nh click nh?m n?t t?i icon/avatar/UI asset.
+  return null;
 }
 
 async function waitForImageAndDownload(before, timeoutMs = 240000) {
@@ -116,28 +136,59 @@ async function waitForImageAndDownload(before, timeoutMs = 240000) {
 
   while (Date.now() < end) {
     const blocked = authCheckpoint();
-    if (blocked) return response('WAITING_USER', {}, blocked);
+
+    if (blocked) {
+      return response('WAITING_USER', {}, blocked);
+    }
 
     const candidates = imageCandidates();
+
     const fresh = candidates.filter(img => {
-      const key = String(img.currentSrc || img.src || '');
+      const key = String(
+        img.currentSrc ||
+        img.src ||
+        ''
+      );
+
       return key && !before.has(key);
     });
 
     if (fresh.length) {
       const img = fresh[fresh.length - 1];
-      const button = await findDownloadForImage(img);
-      if (button) {
-        button.click();
+
+      const src=String(
+        img.currentSrc ||
+        img.src ||
+        ''
+      );
+
+      const width=Number(img.naturalWidth || 0);
+      const height=Number(img.naturalHeight || 0);
+
+      // ?u ti?n URL c?a ??ng ?nh thay v? b?m n?t Download.
+      if (/^https?:\/\//i.test(src)) {
         return response('DONE', {
-          download_triggered: true,
-          image_src_kind: String(img.currentSrc || img.src || '').startsWith('blob:') ? 'blob' : 'url'
+          download_triggered:false,
+          image_url:src,
+          image_width:width,
+          image_height:height
         });
       }
 
-      const src = String(img.currentSrc || img.src || '');
-      if (/^https?:\/\//i.test(src)) {
-        return response('DONE', { download_triggered: false, image_url: src });
+      // Blob image: ch? b?m n?t Download n?m g?n ?nh/modal.
+      const button = await findDownloadForImage(img);
+
+      if (button) {
+        button.click();
+
+        return response('DONE', {
+          download_triggered:true,
+          image_src_kind:src.startsWith('blob:')
+            ? 'blob'
+            : 'url',
+          image_width:width,
+          image_height:height
+        });
       }
     }
 
@@ -146,8 +197,8 @@ async function waitForImageAndDownload(before, timeoutMs = 240000) {
 
   return response(
     'NEEDS_REVIEW',
-    { current_url: location.href },
-    'Không xác định được ảnh ChatGPT mới hoặc nút tải ảnh trong thời gian chờ'
+    { current_url:location.href },
+    'Kh?ng x?c ??nh ???c ?nh ChatGPT m?i ho?c n?t t?i ?nh trong th?i gian ch?'
   );
 }
 

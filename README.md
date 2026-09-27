@@ -1,4 +1,4 @@
-# Social Manager V2.1.3
+# Social Manager V2.1.5
 
 [▶ Mở Social Manager bằng GitHub Codespaces](https://codespaces.new/hiep4294/Social-Manager?quickstart=1)
 

@@ -106,7 +106,7 @@ if (!enabled) {
   const reservationTtlMs = Math.max(heartbeatTtlMs, Number(process.env.CHROME_EXTENSION_RESERVATION_TTL_MS || 60_000));
   const statusPath = path.join(publicDir, 'chrome-extension-status.json');
   const statePath = path.join(dataDir, 'chrome-extension-bridge.json');
-  const expectedVersion = '2.1.3';
+  const expectedVersion = '2.1.5';
 
   function newState() {
     return {
@@ -143,7 +143,18 @@ if (!enabled) {
   }
 
   function online() {
-    return extensionStatusIsHealthy({ paired: Boolean(state.paired), last_heartbeat_at: lastHeartbeatAt }, { ttlMs: heartbeatTtlMs });
+    return (
+      extensionVersion === expectedVersion &&
+      extensionStatusIsHealthy(
+        {
+          paired:Boolean(state.paired),
+          last_heartbeat_at:lastHeartbeatAt
+        },
+        {
+          ttlMs:heartbeatTtlMs
+        }
+      )
+    );
   }
 
   function writeStatus(extra = {}) {
@@ -364,10 +375,11 @@ if (!enabled) {
           service: 'social-manager-chrome-extension-bridge',
           paired: Boolean(state.paired),
           extension_online: online(),
-          extension_version: extensionVersion,
           last_heartbeat_at: lastHeartbeatAt,
           expected_version: expectedVersion,
+          extension_version: extensionVersion,
           reload_required: Boolean(extensionVersion && extensionVersion !== expectedVersion),
+
           supported_actions: CHROME_EXTENSION_ACTIONS
         });
       }
@@ -404,10 +416,41 @@ if (!enabled) {
         });
       }
 
-      if (req.method === 'POST' && url.pathname === '/v1/jobs/claim') {
-        lastHeartbeatAt = nowIso();
-        const job = claimJob();
-        return sendJson(res, 200, { ok: true, job });
+      if (
+        req.method === 'POST' &&
+        url.pathname === '/v1/jobs/claim'
+      ) {
+        lastHeartbeatAt=nowIso();
+
+        if (
+          extensionVersion !==
+          expectedVersion
+        ) {
+          writeStatus();
+
+          return sendJson(
+            res,
+            409,
+            {
+              ok:false,
+              error:'Extension version kh?ng kh?p expected_version',
+              extension_version:extensionVersion,
+              expected_version:expectedVersion,
+              reload_required:true
+            }
+          );
+        }
+
+        const job=claimJob();
+
+        return sendJson(
+          res,
+          200,
+          {
+            ok:true,
+            job
+          }
+        );
       }
 
       if (req.method === 'POST' && url.pathname === '/v1/jobs/result') {

@@ -110,10 +110,11 @@ assert.match(
   /do not add a second title\/logo layer/,
   'Không được ghép title/logo lần hai lên poster ChatGPT'
 );
+
 assert.match(
   foodAgentSource,
-  /if \(due\.before && !job\?\.manual_run\) return;/,
-  'Job manual phải chạy ngay cả khi chưa tới giờ lịch tự động'
+  /IMAGE_IMPORT_REJECTED/,
+  '?nh t?i sai ph?i chuy?n retry thay v? l?p l?i v? h?n'
 );
 
 const localConfig = JSON.parse(

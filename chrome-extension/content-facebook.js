@@ -116,33 +116,197 @@ function postVerified(message) {
 
 async function postPage(payload) {
   const blocked = checkpoint();
-  if (blocked) return response('WAITING_USER', {}, blocked);
 
-  const opener = clickableByText(/create a post|tao bai viet|what.?s on your mind|ban dang nghi gi/i);
-  if (!opener) return response('NEEDS_REVIEW', {}, 'Không mở được hộp tạo bài trên Page');
+  if (blocked) {
+    return response(
+      'WAITING_USER',
+      {},
+      blocked
+    );
+  }
+
+  const openerPattern =
+    /create a post|tao bai viet|write a post|viet bai viet|what.?s on your mind|ban dang nghi gi|write something|viet gi do/i;
+
+  // Facebook Page th??ng render composer tr? h?n document.load.
+  // Kh?ng fail ngay sau 1.5 gi?y.
+  const opener = await waitFor(
+    () => clickableByText(openerPattern),
+    20000,
+    500
+  );
+
+  if (!opener) {
+    const composerCandidates = [
+      ...document.querySelectorAll(
+        'button,[role="button"]'
+      )
+    ]
+      .filter(visible)
+      .map(el => ({
+        text:textOf(el).slice(0,120),
+        aria:String(
+          el.getAttribute('aria-label') ||
+          ''
+        ).slice(0,120)
+      }))
+      .filter(x => x.text || x.aria)
+      .slice(0,30);
+
+    return response(
+      'NEEDS_REVIEW',
+      {
+        page_url:location.href,
+        clicked_post:false,
+        composer_candidates:
+          composerCandidates
+      },
+      'Kh?ng m? ???c h?p t?o b?i tr?n Page'
+    );
+  }
+
   opener.click();
-  await sleep(900);
 
-  const dialog = [...document.querySelectorAll('[role="dialog"]')].filter(visible).pop() || document;
-  const editor = [...dialog.querySelectorAll('[contenteditable="true"],textarea')].filter(visible)[0];
-  if (!editor && payload.message) return response('NEEDS_REVIEW', {}, 'Không tìm thấy vùng nhập nội dung bài Page');
-  if (editor && payload.message) setField(editor, payload.message);
+  const editor = await waitFor(
+    () => {
+      const dialog = [
+        ...document.querySelectorAll(
+          '[role="dialog"]'
+        )
+      ].filter(visible).pop();
 
-  try { await attachImage(payload.image_url); }
-  catch (error) { return response('NEEDS_REVIEW', {}, `Không gắn được ảnh: ${String(error?.message || error)}`); }
+      const root=dialog || document;
 
-  const post = clickableByText(/^(post|dang)$/i, dialog) || clickableByText(/^(post|dang)$/i);
-  if (!post) return response('NEEDS_REVIEW', {}, 'Không tìm thấy nút Đăng của Page');
+      return [
+        ...root.querySelectorAll(
+          '[contenteditable="true"],textarea'
+        )
+      ].filter(visible)[0] || null;
+    },
+    12000,
+    400
+  );
+
+  if (!editor && payload.message) {
+    return response(
+      'NEEDS_REVIEW',
+      {
+        page_url:location.href,
+        clicked_post:false
+      },
+      'Kh?ng t?m th?y v?ng nh?p n?i dung b?i Page'
+    );
+  }
+
+  if(editor && payload.message){
+    setField(
+      editor,
+      payload.message
+    );
+  }
+
+  try{
+    await attachImage(
+      payload.image_url
+    );
+  }catch(error){
+    return response(
+      'NEEDS_REVIEW',
+      {
+        page_url:location.href,
+        clicked_post:false
+      },
+      'Kh?ng g?n ???c ?nh: '+
+      String(
+        error?.message ||
+        error
+      )
+    );
+  }
+
+  const post = await waitFor(
+    () => {
+      const dialog = [
+        ...document.querySelectorAll(
+          '[role="dialog"]'
+        )
+      ].filter(visible).pop();
+
+      return (
+        clickableByText(
+          /^(post|dang)$/i,
+          dialog || document
+        ) ||
+        clickableByText(
+          /^(post|dang)$/i
+        )
+      );
+    },
+    12000,
+    400
+  );
+
+  if(!post){
+    return response(
+      'NEEDS_REVIEW',
+      {
+        page_url:location.href,
+        clicked_post:false
+      },
+      'Kh?ng t?m th?y n?t ??ng c?a Page'
+    );
+  }
+
   post.click();
+
   await sleep(3500);
 
-  const after = checkpoint();
-  if (after) return response('WAITING_USER', {}, after);
-  const verified = await waitFor(() => postVerified(payload.message || ''), 20000, 800);
-  if (!verified) {
-    return response('NEEDS_REVIEW', { page_url: location.href, clicked_post: true, verified: false }, 'Đã bấm Đăng nhưng chưa xác minh được bài xuất hiện; không tự đăng lại để tránh trùng bài');
+  const after=checkpoint();
+
+  if(after){
+    return response(
+      'WAITING_USER',
+      {
+        page_url:location.href,
+        clicked_post:true,
+        verified:false
+      },
+      after
+    );
   }
-  return response('DONE', { page_name: payload.page_name || '', page_url: payload.page_url || location.href, verified: true });
+
+  const verified=await waitFor(
+    () => postVerified(
+      payload.message || ''
+    ),
+    25000,
+    800
+  );
+
+  if(!verified){
+    return response(
+      'NEEDS_REVIEW',
+      {
+        page_url:location.href,
+        clicked_post:true,
+        verified:false
+      },
+      '?? b?m ??ng nh?ng ch?a x?c minh ???c b?i xu?t hi?n; kh?ng t? ??ng l?i ?? tr?nh tr?ng b?i'
+    );
+  }
+
+  return response(
+    'DONE',
+    {
+      page_name:
+        payload.page_name || '',
+      page_url:
+        payload.page_url ||
+        location.href,
+      clicked_post:true,
+      verified:true
+    }
+  );
 }
 
 async function execute(job) {

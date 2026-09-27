@@ -107,8 +107,8 @@ Trước khi nhận job ảnh, runtime phải đạt:
 ```text
 paired=true
 extension_online=true
-extension_version=2.1.3
-expected_version=2.1.3
+extension_version=2.1.5
+expected_version=2.1.5
 reload_required=false
 ```
 

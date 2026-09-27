@@ -50,26 +50,77 @@ async function sendToChatGPT(tabId, job) {
   throw new Error(`Không giao được job cho ChatGPT content script: ${String(lastError?.message || lastError || 'unknown')}`);
 }
 
-async function waitDownload(startedAt, timeoutMs = 90000) {
+async function waitDownload(startedAt, options = {}, timeoutMs = 90000) {
   const end = Date.now() + timeoutMs;
-  const startedAfter = new Date(startedAt - 3000).toISOString();
+
+  const startedAfter =
+    new Date(startedAt - 3000).toISOString();
+
+  const expectedId =
+    Number.isInteger(options.expectedId)
+      ? options.expectedId
+      : null;
+
+  const minBytes=Math.max(
+    50000,
+    Number(options.minBytes || 50000)
+  );
+
+  const baseline =
+    options.baseline instanceof Set
+      ? options.baseline
+      : new Set();
 
   while (Date.now() < end) {
-    const items = await chrome.downloads.search({
-      startedAfter,
-      orderBy: ['-startTime'],
-      limit: 20
-    });
+    const items =
+      expectedId != null
+        ? await chrome.downloads.search({
+            id:expectedId
+          })
+        : await chrome.downloads.search({
+            startedAfter,
+            orderBy:['-startTime'],
+            limit:30
+          });
 
-    const hit = items.find(item => {
-      const name = String(item.filename || '').toLowerCase();
-      const mime = String(item.mime || '').toLowerCase();
-      return item.state === 'complete' &&
+    const hit=items.find(item => {
+      if(baseline.has(item.id)){
+        return false;
+      }
+
+      const name=
+        String(item.filename || '')
+          .toLowerCase();
+
+      const base=
+        name.split(/[\\/]/).pop() || '';
+
+      const mime=
+        String(item.mime || '')
+          .toLowerCase();
+
+      const bytes=
+        Number(item.fileSize || 0);
+
+      const obviousUiAsset =
+        /^(icon|favicon)([-_.]|$)/i.test(base);
+
+      return (
+        item.state === 'complete' &&
         !item.error &&
-        (mime.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(name));
+        !obviousUiAsset &&
+        bytes >= minBytes &&
+        (
+          mime.startsWith('image/') ||
+          /\.(png|jpe?g|webp)$/i.test(name)
+        )
+      );
     });
 
-    if (hit) return hit;
+    if(hit){
+      return hit;
+    }
+
     await sleep(1000);
   }
 
@@ -96,6 +147,16 @@ export async function runChatGPTImageJob(job) {
 
   const previous = (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0] || null;
   const startedAt = Date.now();
+
+  const downloadBaseline = new Set(
+    (
+      await chrome.downloads.search({
+        orderBy:['-startTime'],
+        limit:100
+      })
+    ).map(x => x.id)
+  );
+
   let tab = null;
 
   try {
@@ -108,15 +169,61 @@ export async function runChatGPTImageJob(job) {
     await sleep(1800);
 
     const execution = await sendToChatGPT(tab.id, job);
-    if (String(execution?.status || '').toUpperCase() !== 'DONE') {
+
+    if (
+      String(execution?.status || '')
+        .toUpperCase() !== 'DONE'
+    ) {
       return execution;
     }
 
-    if (execution?.result?.image_url) {
-      await triggerDirectDownload(execution.result.image_url, job.payload?.recipe_code);
+    const imageWidth =
+      Number(
+        execution?.result?.image_width ||
+        0
+      );
+
+    const imageHeight =
+      Number(
+        execution?.result?.image_height ||
+        0
+      );
+
+    if (
+      imageWidth < 512 ||
+      imageHeight < 512
+    ) {
+      return {
+        status:'NEEDS_REVIEW',
+        error:'ChatGPT candidate image kh?ng ??t t?i thi?u 512x512',
+        result:{
+          generation_done:true,
+          image_width:imageWidth,
+          image_height:imageHeight
+        }
+      };
     }
 
-    const download = await waitDownload(startedAt);
+    let expectedDownloadId=null;
+
+    if(execution?.result?.image_url){
+      expectedDownloadId =
+        await triggerDirectDownload(
+          execution.result.image_url,
+          job.payload?.recipe_code
+        );
+    }
+
+    const download =
+      await waitDownload(
+        startedAt,
+        {
+          expectedId:expectedDownloadId,
+          baseline:downloadBaseline,
+          minBytes:50000
+        }
+      );
+
     if (!download) {
       return {
         status: 'NEEDS_REVIEW',

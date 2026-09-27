@@ -305,10 +305,36 @@ export async function executePostPage(page, payload, db) {
 
   let tempImage = null;
   try {
-    if (payload.image_url) {
+    const localImagePath =
+      String(
+        payload.local_image_path ||
+        ''
+      ).trim();
+
+    const localImageReady =
+      Boolean(localImagePath) &&
+      fs.existsSync(localImagePath) &&
+      fs.statSync(localImagePath).isFile();
+
+    if (localImageReady || payload.image_url) {
       const dataDir = path.resolve(process.cwd(), 'data');
       fs.mkdirSync(dataDir, { recursive: true });
-      tempImage = await downloadImage(payload.image_url, dataDir);
+
+      let uploadImage = null;
+
+      if (localImageReady) {
+        uploadImage =
+          path.resolve(localImagePath);
+      } else {
+        tempImage =
+          await downloadImage(
+            payload.image_url,
+            dataDir
+          );
+
+        uploadImage =
+          tempImage;
+      }
 
       // Use the actual Photo/Video control and its filechooser event. Facebook
       // keeps several hidden file inputs on the page; selecting an arbitrary
@@ -343,7 +369,7 @@ export async function executePostPage(page, payload, db) {
       const chooser = await chooserPromise;
 
       if (chooser) {
-        await chooser.setFiles(tempImage);
+        await chooser.setFiles(uploadImage);
       } else {
         // Conservative fallback only inside the active composer dialog.
         let input = dialog.locator('input[type="file"][accept*="image" i]').last();
@@ -356,7 +382,7 @@ export async function executePostPage(page, payload, db) {
           );
         }
 
-        await input.setInputFiles(tempImage, { timeout: 7000 });
+        await input.setInputFiles(uploadImage, { timeout: 7000 });
       }
 
       // Wait for a stable media preview in the composer, not merely a file

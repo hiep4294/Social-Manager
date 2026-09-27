@@ -627,12 +627,32 @@ if (!enabled) {
   async function getContext() {
     if (context) return context;
     if (!browserPath) throw Object.assign(new Error('Không tìm thấy Chrome/Chromium. Hãy cấu hình FB_OPERATOR_BROWSER_PATH.'), { code: 'OPERATOR_UNAVAILABLE' });
+    const browserArgs = [
+      '--no-sandbox',
+      '--disable-dev-shm-usage'
+    ];
+
+    const offscreen =
+      String(
+        process.env.FB_OPERATOR_WINDOW_OFFSCREEN ??
+        'true'
+      ).toLowerCase() !== 'false';
+
+    if (!headless && offscreen) {
+      browserArgs.push(
+        '--window-position=-32000,-32000',
+        '--window-size=1440,980',
+        '--no-first-run',
+        '--no-default-browser-check'
+      );
+    }
+
     context = await chromium.launchPersistentContext(profileDir, {
       executablePath: browserPath,
       headless,
       viewport: { width: 1440, height: 980 },
       locale: process.env.FB_OPERATOR_LOCALE || 'vi-VN',
-      args: ['--no-sandbox', '--disable-dev-shm-usage']
+      args: browserArgs
     });
     return context;
   }

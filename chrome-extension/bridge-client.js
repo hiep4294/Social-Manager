@@ -1,5 +1,5 @@
 export const BRIDGE_URL = 'http://127.0.0.1:3210';
-export const EXTENSION_VERSION = '2.1.3';
+export const EXTENSION_VERSION = '2.1.5';
 
 export async function getBridgeToken() {
   const value = await chrome.storage.local.get('bridgeToken');
